@@ -1,36 +1,85 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# PressTech — Enterprise AI Automation Platform
 
-## Getting Started
+Production-grade SaaS platform for building intelligent bots, visual workflows, knowledge bases, and multi-channel integrations.
 
-First, run the development server:
+## Tech Stack
+
+| Layer | Technology |
+|-------|-----------|
+| Frontend | Next.js 16, React 19, TypeScript, Tailwind v4, shadcn/ui → **Vercel** |
+| Backend | Laravel 13, PHP 8.3+, Sanctum, Spatie Permission → **Shared hosting** |
+| Database | MySQL / MariaDB |
+| Cache/Queue | File + database drivers (no Redis required on shared hosting) |
+| Storage | Local disk or S3-compatible object storage |
+
+## Quick Start (Local)
+
+### Prerequisites
+
+- Node.js 20+
+- PHP 8.3+ with Composer
+- MySQL 8+ (Laragon, XAMPP, or similar)
+
+### 1. Frontend
 
 ```bash
+npm install
+cp .env.example .env.local
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000)
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+**Demo login:** `john@presstech.com` / `Password1` (MSW mocks enabled when `NEXT_PUBLIC_USE_MOCKS=true`)
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+### 2. Backend
 
-## Learn More
+```bash
+cd backend
+composer install
+cp .env.example .env
+php artisan key:generate
+php artisan migrate
+php artisan serve
+```
 
-To learn more about Next.js, take a look at the following resources:
+API: [http://localhost:8000/api/v1](http://localhost:8000/api/v1)
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Swagger docs: [http://localhost:8000/api/documentation](http://localhost:8000/api/documentation)
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Project Structure
 
-## Deploy on Vercel
+```
+presstech/
+├── src/                    # Next.js frontend (Feature-Driven Architecture)
+│   ├── app/                # App Router pages
+│   ├── features/           # Feature modules (auth, bots, workflows...)
+│   ├── components/ui/      # shadcn/ui primitives
+│   ├── hooks/              # Shared React hooks
+│   ├── services/api/       # API client layer
+│   ├── store/              # Zustand stores
+│   └── mocks/              # MSW mock handlers (dev)
+├── backend/                # Laravel API
+│   ├── app/Modules/        # Domain modules
+│   ├── app/Models/         # Eloquent models
+│   └── routes/api.php      # API v1 routes
+└── docs/DEPLOYMENT.md      # Shared hosting + Vercel guide
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Deployment
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+| App | Platform |
+|-----|----------|
+| Frontend (`/`) | [Vercel](https://vercel.com) |
+| API (`/backend`) | Shared PHP hosting (document root → `backend/public`) |
+
+See **[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)** for step-by-step instructions, environment variables, cron jobs, and CORS/cookie setup.
+
+## Environment Variables
+
+- Frontend: `.env.example` → copy to `.env.local`
+- Backend: `backend/.env.example` → copy to `backend/.env`
+
+## License
+
+Proprietary — PressTech Inc.
