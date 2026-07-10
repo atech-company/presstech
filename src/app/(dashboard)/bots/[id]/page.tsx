@@ -9,6 +9,7 @@ import { knowledgeService } from "@/features/knowledge/services/knowledge-servic
 import { integrationService } from "@/features/integrations/services/integration-service";
 import { analyticsService } from "@/services/api/platform-service";
 import { ChatEmulator } from "@/features/chat-emulator/components/chat-emulator";
+import { aiService } from "@/services/api/ai-service";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -16,6 +17,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
@@ -30,16 +38,28 @@ export default function BotDetailPage({ params }: { params: Promise<{ id: string
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [instructions, setInstructions] = useState("");
+  const [aiProvider, setAiProvider] = useState("deepseek");
+  const [aiModel, setAiModel] = useState("deepseek-chat");
   const [initialized, setInitialized] = useState(false);
+
+  const { data: aiProvidersData } = useQuery({
+    queryKey: ["ai-providers"],
+    queryFn: () => aiService.providers(),
+  });
+
+  const aiProviders = aiProvidersData?.data.providers ?? [];
 
   useEffect(() => {
     if (bot && !initialized) {
       setName(bot.name);
       setDescription(bot.description ?? "");
       setInstructions(bot.instructions ?? "");
+      const settings = bot.settings ?? {};
+      setAiProvider((settings.ai_provider as string) ?? aiProvidersData?.data.default ?? "deepseek");
+      setAiModel((settings.ai_model as string) ?? "deepseek-chat");
       setInitialized(true);
     }
-  }, [bot, initialized]);
+  }, [bot, initialized, aiProvidersData?.data.default]);
 
   const { data: knowledgeData } = useQuery({
     queryKey: ["knowledge", bot?.workspace_id, id],
@@ -60,7 +80,17 @@ export default function BotDetailPage({ params }: { params: Promise<{ id: string
   });
 
   const updateMutation = useMutation({
-    mutationFn: () => botService.update(id, { name, description, instructions }),
+    mutationFn: () =>
+      botService.update(id, {
+        name,
+        description,
+        instructions,
+        settings: {
+          ...(bot?.settings ?? {}),
+          ai_provider: aiProvider,
+          ai_model: aiModel,
+        },
+      }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["bots", id] });
       toast.success("Bot updated");
@@ -85,6 +115,9 @@ export default function BotDetailPage({ params }: { params: Promise<{ id: string
   }
 
   if (!bot) return <p className="text-muted-foreground">Bot not found</p>;
+
+  const selectedProvider = aiProviders.find((p) => p.id === aiProvider);
+  const modelOptions = selectedProvider?.models ?? [];
 
   return (
     <div>
@@ -125,6 +158,50 @@ export default function BotDetailPage({ params }: { params: Promise<{ id: string
               <div className="space-y-2">
                 <Label htmlFor="instructions">Instructions</Label>
                 <Textarea id="instructions" rows={6} value={instructions} onChange={(e) => setInstructions(e.target.value)} />
+              </div>
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-2">
+                  <Label>AI Provider</Label>
+                  <Select
+                    value={aiProvider}
+                    onValueChange={(value) => {
+                      setAiProvider(value);
+                      const provider = aiProviders.find((p) => p.id === value);
+                      if (provider?.default_model) setAiModel(provider.default_model);
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select provider" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {aiProviders.map((provider) => (
+                        <SelectItem key={provider.id} value={provider.id} disabled={!provider.configured}>
+                          {provider.label}{!provider.configured ? " (not configured)" : ""}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>AI Model</Label>
+                  <Select value={aiModel} onValueChange={setAiModel}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select model" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {modelOptions.map((model) => (
+                        <SelectItem key={model.id} value={model.id}>
+                          {model.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {aiProvider === "deepseek" && (
+                    <p className="text-xs text-muted-foreground">
+                      Use <strong>DeepSeek Reasoner</strong> for the most capable answers (slower).
+                    </p>
+                  )}
+                </div>
               </div>
               <Button onClick={() => updateMutation.mutate()} disabled={updateMutation.isPending}>
                 Save Changes
