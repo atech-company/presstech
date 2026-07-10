@@ -1,7 +1,23 @@
 import { create } from "zustand";
-import { createJSONStorage, persist } from "zustand/middleware";
+import { createJSONStorage, persist, type StateStorage } from "zustand/middleware";
 import type { User } from "@/types/api";
-import { createCookieStorage } from "@/lib/cookie-storage";
+
+const cookieStorage: StateStorage = {
+  getItem(name: string): string | null {
+    if (typeof document === "undefined") return null;
+    const match = document.cookie.match(new RegExp(`(?:^|; )${name}=([^;]*)`));
+    return match ? decodeURIComponent(match[1]) : null;
+  },
+  setItem(name: string, value: string): void {
+    if (typeof document === "undefined") return;
+    const maxAge = 60 * 60 * 24 * 7;
+    document.cookie = `${name}=${encodeURIComponent(value)}; path=/; max-age=${maxAge}; SameSite=Lax`;
+  },
+  removeItem(name: string): void {
+    if (typeof document === "undefined") return;
+    document.cookie = `${name}=; path=/; max-age=0; SameSite=Lax`;
+  },
+};
 
 interface AuthState {
   user: User | null;
@@ -20,7 +36,7 @@ export const useAuthStore = create<AuthState>()(
     }),
     {
       name: "presstech-auth",
-      storage: createJSONStorage(() => createCookieStorage()),
+      storage: createJSONStorage(() => cookieStorage),
     }
   )
 );

@@ -13,6 +13,7 @@ export interface Integration {
   status: string;
   config: Record<string, unknown> | null;
   has_credentials: boolean;
+  webhook_url?: string | null;
   created_at: string;
   updated_at: string;
 }

@@ -95,21 +95,47 @@ export default function KnowledgePage() {
                   <Select value={type} onValueChange={setType}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      {["txt", "markdown", "pdf", "csv", "website"].map((t) => (
+                      {["txt", "markdown", "pdf", "csv", "website", "sitemap"].map((t) => (
                         <SelectItem key={t} value={t}>{t}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                 </div>
+                {(type === "website" || type === "sitemap") && (
+                  <div className="space-y-2">
+                    <Label>{type === "sitemap" ? "Sitemap URL" : "Website URL"}</Label>
+                    <Input
+                      value={sourceUrl}
+                      onChange={(e) => setSourceUrl(e.target.value)}
+                      placeholder={type === "sitemap" ? "https://example.com/sitemap.xml" : "https://example.com"}
+                      required
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      {type === "website"
+                        ? "Crawls the homepage and linked pages on the same domain (up to 25 pages)."
+                        : "Reads URLs from your sitemap and indexes each page."}
+                    </p>
+                  </div>
+                )}
+                {type !== "website" && type !== "sitemap" && (
                 <div className="space-y-2">
                   <Label>URL (optional)</Label>
                   <Input value={sourceUrl} onChange={(e) => setSourceUrl(e.target.value)} placeholder="https://..." />
                 </div>
+                )}
                 <div className="space-y-2">
                   <Label>File (optional)</Label>
                   <Input type="file" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
                 </div>
-                <Button onClick={() => createMutation.mutate()} disabled={!name || createMutation.isPending} className="w-full">
+                <Button
+                  onClick={() => createMutation.mutate()}
+                  disabled={
+                    !name ||
+                    createMutation.isPending ||
+                    ((type === "website" || type === "sitemap") && !sourceUrl)
+                  }
+                  className="w-full"
+                >
                   Add Source
                 </Button>
               </div>
