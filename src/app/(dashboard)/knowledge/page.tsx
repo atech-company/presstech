@@ -94,7 +94,14 @@ export default function KnowledgePage() {
         toast.success(`Indexed ${res.data.chunk_count} chunks`);
       }
     },
-    onError: () => toast.error("Re-crawl failed"),
+    onError: (err: unknown) => {
+      const status = err && typeof err === "object" && "status" in err ? (err as { status: number }).status : 0;
+      if (status === 404) {
+        toast.error("Re-crawl API not deployed yet. Upload backend-update.zip to Hostinger (see backend/DEPLOY-PATCH.md).");
+      } else {
+        toast.error("Re-crawl failed");
+      }
+    },
   });
 
   return (

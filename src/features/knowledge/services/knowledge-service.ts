@@ -1,4 +1,4 @@
-import { apiDelete, apiGet, apiPatch, apiPost } from "@/services/api/client";
+import { apiDelete, apiGet, apiPatch, apiPost, ApiClientError } from "@/services/api/client";
 import type { KnowledgeSource } from "@/types/api/knowledge";
 
 export const knowledgeService = {
@@ -26,8 +26,15 @@ export const knowledgeService = {
     return apiDelete(`/knowledge/${id}`);
   },
 
-  recrawl(id: string) {
-    return apiPost<KnowledgeSource>(`/knowledge/${id}/recrawl`, {});
+  async recrawl(id: string) {
+    try {
+      return await apiPost<KnowledgeSource>(`/knowledge/${id}/recrawl`, {});
+    } catch (err) {
+      if (err instanceof ApiClientError && err.status === 404) {
+        return apiPatch<KnowledgeSource>(`/knowledge/${id}`, { recrawl: true });
+      }
+      throw err;
+    }
   },
 
   reprocess(id: string) {

@@ -16,6 +16,7 @@ import {
 import { PageHeader } from "@/components/layout/page-header";
 import { integrationService } from "@/features/integrations/services/integration-service";
 import { botService } from "@/features/bots/services/bot-service";
+import { ApiClientError } from "@/services/api/client";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -30,6 +31,11 @@ import {
 } from "@/components/ui/select";
 import type { IntegrationTestResult } from "@/types/api/integrations";
 import { toast } from "sonner";
+
+function apiErrorMessage(err: unknown, fallback: string) {
+  if (err instanceof ApiClientError) return err.message;
+  return fallback;
+}
 
 function qrImageUrl(data: string) {
   return `https://api.qrserver.com/v1/create-qr-code/?size=280x280&data=${encodeURIComponent(data)}`;
@@ -89,7 +95,7 @@ export default function IntegrationDetailPage() {
       setSessionApiKey("");
       toast.success("Settings saved");
     },
-    onError: () => toast.error("Failed to save settings"),
+    onError: (err) => toast.error(apiErrorMessage(err, "Failed to save settings")),
   });
 
   const testMutation = useMutation({
@@ -98,7 +104,7 @@ export default function IntegrationDetailPage() {
       setTestResult(res.data);
       toast.success(res.data.ok ? "All checks passed" : "Some checks failed");
     },
-    onError: () => toast.error("Test failed"),
+    onError: (err) => toast.error(apiErrorMessage(err, "Test failed")),
   });
 
   const connectMutation = useMutation({
@@ -107,7 +113,7 @@ export default function IntegrationDetailPage() {
       toast.success("Connecting — fetching QR code...");
       qrMutation.mutate();
     },
-    onError: () => toast.error("Failed to start WhatsApp connection"),
+    onError: (err) => toast.error(apiErrorMessage(err, "Failed to start WhatsApp connection")),
   });
 
   const qrMutation = useMutation({
@@ -118,7 +124,7 @@ export default function IntegrationDetailPage() {
         toast.error("No QR code returned — save PAT + Session ID first, then click Connect");
       }
     },
-    onError: () => toast.error("Failed to fetch QR code"),
+    onError: (err) => toast.error(apiErrorMessage(err, "Failed to fetch QR code")),
   });
 
   function copyWebhook(url: string) {
@@ -312,8 +318,18 @@ export default function IntegrationDetailPage() {
 
               <div className="flex flex-wrap gap-3">
                 <Button
-                  onClick={() => connectMutation.mutate()}
-                  disabled={connectMutation.isPending || !sessionId}
+                  onClick={() => {
+                    if (!sessionId) {
+                      toast.error("Enter and save Wasender Session ID first");
+                      return;
+                    }
+                    if (!integration.config?.personal_access_token_set && !pat) {
+                      toast.error("Enter and save Personal Access Token first");
+                      return;
+                    }
+                    connectMutation.mutate();
+                  }}
+                  disabled={connectMutation.isPending}
                 >
                   {connectMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                   Connect &amp; Get QR
