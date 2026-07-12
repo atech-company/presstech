@@ -1,3 +1,7 @@
+import type { WidgetBotConfig, WidgetMessage, WidgetProduct } from "@/features/widget/types";
+
+export type { WidgetBotConfig, WidgetMessage, WidgetProduct };
+
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
 function widgetApiBase(): string {
@@ -29,20 +33,6 @@ async function widgetFetch<T>(path: string, token: string, options?: RequestInit
   }
 
   return json.data as T;
-}
-
-export interface WidgetBotConfig {
-  bot_id: string;
-  name: string;
-  description?: string | null;
-  avatar?: string | null;
-}
-
-export interface WidgetMessage {
-  id: string;
-  role: "user" | "assistant";
-  content: string;
-  created_at: string;
 }
 
 export const widgetService = {

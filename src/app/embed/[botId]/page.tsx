@@ -3,7 +3,9 @@
 import { useEffect, useRef, useState } from "react";
 import { useParams, useSearchParams } from "next/navigation";
 import { Bot, Loader2, Send, User } from "lucide-react";
-import { widgetService, type WidgetMessage } from "@/features/widget/services/widget-service";
+import { ProductCards } from "@/features/widget/components/product-cards";
+import { widgetService } from "@/features/widget/services/widget-service";
+import type { WidgetMessage } from "@/features/widget/types";
 import { cn } from "@/lib/utils";
 
 export default function EmbedChatPage() {
@@ -36,7 +38,7 @@ export default function EmbedChatPage() {
           {
             id: "welcome",
             role: "assistant",
-            content: `Hi! I'm ${config.name}. How can I help you?`,
+            content: `Hi! I'm ${config.name}. How can I help you? Ask me about any product.`,
             created_at: new Date().toISOString(),
           },
         ]);
@@ -111,20 +113,32 @@ export default function EmbedChatPage() {
         <div className="space-y-4">
           {messages.map((msg) => (
             <div key={msg.id} className={cn("flex gap-2", msg.role === "user" ? "flex-row-reverse" : "flex-row")}>
-              <div className={cn(
-                "flex h-7 w-7 shrink-0 items-center justify-center rounded-full",
-                msg.role === "user" ? "bg-primary text-primary-foreground" : "bg-muted"
-              )}>
+              <div
+                className={cn(
+                  "flex h-7 w-7 shrink-0 items-center justify-center rounded-full",
+                  msg.role === "user" ? "bg-primary text-primary-foreground" : "bg-muted"
+                )}
+              >
                 {msg.role === "user" ? <User className="h-3.5 w-3.5" /> : <Bot className="h-3.5 w-3.5" />}
               </div>
-              <div className={cn(
-                "max-w-[85%] rounded-2xl px-3 py-2 text-sm",
-                msg.role === "user" ? "bg-primary text-primary-foreground" : "bg-muted"
-              )}>
-                {msg.content}
+
+              <div className={cn("min-w-0", msg.role === "user" ? "max-w-[85%]" : "max-w-full flex-1")}>
+                <div
+                  className={cn(
+                    "rounded-2xl px-3 py-2 text-sm",
+                    msg.role === "user" ? "bg-primary text-primary-foreground" : "bg-muted"
+                  )}
+                >
+                  {msg.content}
+                </div>
+
+                {msg.role === "assistant" && msg.products && msg.products.length > 0 && (
+                  <ProductCards products={msg.products} />
+                )}
               </div>
             </div>
           ))}
+
           {typing && (
             <div className="flex gap-2">
               <div className="flex h-7 w-7 items-center justify-center rounded-full bg-muted">
@@ -141,7 +155,7 @@ export default function EmbedChatPage() {
         <input
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          placeholder="Type a message..."
+          placeholder="Ask about a product..."
           className="flex-1 rounded-full border bg-background px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/30"
           disabled={typing}
         />
