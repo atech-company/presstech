@@ -25,6 +25,14 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { Link2, Plus, Unlink } from "lucide-react";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 
@@ -41,6 +49,11 @@ export default function BotDetailPage({ params }: { params: Promise<{ id: string
   const [aiProvider, setAiProvider] = useState("deepseek");
   const [aiModel, setAiModel] = useState("deepseek-chat");
   const [initialized, setInitialized] = useState(false);
+  const [addKnowledgeOpen, setAddKnowledgeOpen] = useState(false);
+  const [knowledgeName, setKnowledgeName] = useState("");
+  const [knowledgeType, setKnowledgeType] = useState("website");
+  const [knowledgeUrl, setKnowledgeUrl] = useState("");
+  const [knowledgeFile, setKnowledgeFile] = useState<File | null>(null);
 
   const { data: aiProvidersData } = useQuery({
     queryKey: ["ai-providers"],
@@ -62,10 +75,14 @@ export default function BotDetailPage({ params }: { params: Promise<{ id: string
   }, [bot, initialized, aiProvidersData?.data.default]);
 
   const { data: knowledgeData } = useQuery({
-    queryKey: ["knowledge", bot?.workspace_id, id],
-    queryFn: () => knowledgeService.list(bot!.workspace_id, id),
+    queryKey: ["knowledge", bot?.workspace_id],
+    queryFn: () => knowledgeService.list(bot!.workspace_id),
     enabled: !!bot,
   });
+
+  const allKnowledge = knowledgeData?.data ?? [];
+  const linkedKnowledge = allKnowledge.filter((s) => s.bot_id === id);
+  const availableKnowledge = allKnowledge.filter((s) => s.bot_id !== id);
 
   const { data: integrationsData } = useQuery({
     queryKey: ["integrations", bot?.workspace_id],
@@ -103,6 +120,50 @@ export default function BotDetailPage({ params }: { params: Promise<{ id: string
       toast.success("Bot archived");
       router.push("/bots");
     },
+  });
+
+  const linkKnowledgeMutation = useMutation({
+    mutationFn: (sourceId: string) => knowledgeService.update(sourceId, { bot_id: id }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["knowledge", bot?.workspace_id] });
+      toast.success("Knowledge linked to bot");
+    },
+    onError: () => toast.error("Failed to link knowledge"),
+  });
+
+  const unlinkKnowledgeMutation = useMutation({
+    mutationFn: (sourceId: string) => knowledgeService.update(sourceId, { bot_id: null }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["knowledge", bot?.workspace_id] });
+      toast.success("Knowledge unlinked");
+    },
+    onError: () => toast.error("Failed to unlink knowledge"),
+  });
+
+  const addKnowledgeMutation = useMutation({
+    mutationFn: async () => {
+      const formData = new FormData();
+      formData.append("workspace_id", bot!.workspace_id);
+      formData.append("bot_id", id);
+      formData.append("name", knowledgeName);
+      formData.append("type", knowledgeType);
+      if (knowledgeUrl) formData.append("source_url", knowledgeUrl);
+      if (knowledgeFile) formData.append("file", knowledgeFile);
+      return knowledgeService.create(formData);
+    },
+    onSuccess: (res) => {
+      queryClient.invalidateQueries({ queryKey: ["knowledge", bot?.workspace_id] });
+      setAddKnowledgeOpen(false);
+      setKnowledgeName("");
+      setKnowledgeUrl("");
+      setKnowledgeFile(null);
+      if (res.data.status === "failed") {
+        toast.error(res.data.metadata?.error ?? "Knowledge source failed to index");
+      } else {
+        toast.success("Knowledge added and linked to this bot");
+      }
+    },
+    onError: () => toast.error("Failed to add knowledge"),
   });
 
   if (isLoading) {
@@ -214,18 +275,132 @@ export default function BotDetailPage({ params }: { params: Promise<{ id: string
           <ChatEmulator botId={id} botName={bot.name} />
         </TabsContent>
 
-        <TabsContent value="knowledge" className="mt-6">
+        <TabsContent value="knowledge" className="mt-6 space-y-6">
           <Card>
-            <CardHeader><CardTitle>Linked Knowledge</CardTitle></CardHeader>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <CardTitle>Linked Knowledge ({linkedKnowledge.length})</CardTitle>
+              <Dialog open={addKnowledgeOpen} onOpenChange={setAddKnowledgeOpen}>
+                <DialogTrigger asChild>
+                  <Button size="sm">
+                    <Plus className="mr-2 h-4 w-4" />
+                    Add Source
+                  </Button>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>Add Knowledge for {bot.name}</DialogTitle>
+                  </DialogHeader>
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <Label>Name</Label>
+                      <Input value={knowledgeName} onChange={(e) => setKnowledgeName(e.target.value)} />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Type</Label>
+                      <Select value={knowledgeType} onValueChange={setKnowledgeType}>
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          {["txt", "markdown", "pdf", "csv", "website", "sitemap"].map((t) => (
+                            <SelectItem key={t} value={t}>{t}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    {(knowledgeType === "website" || knowledgeType === "sitemap") && (
+                      <div className="space-y-2">
+                        <Label>URL</Label>
+                        <Input
+                          value={knowledgeUrl}
+                          onChange={(e) => setKnowledgeUrl(e.target.value)}
+                          placeholder="https://example.com"
+                        />
+                      </div>
+                    )}
+                    <div className="space-y-2">
+                      <Label>File (optional)</Label>
+                      <Input type="file" onChange={(e) => setKnowledgeFile(e.target.files?.[0] ?? null)} />
+                    </div>
+                    <Button
+                      className="w-full"
+                      disabled={
+                        !knowledgeName ||
+                        addKnowledgeMutation.isPending ||
+                        ((knowledgeType === "website" || knowledgeType === "sitemap") && !knowledgeUrl)
+                      }
+                      onClick={() => addKnowledgeMutation.mutate()}
+                    >
+                      {addKnowledgeMutation.isPending ? "Processing..." : "Add & Link"}
+                    </Button>
+                  </div>
+                </DialogContent>
+              </Dialog>
+            </CardHeader>
             <CardContent>
-              {(knowledgeData?.data ?? []).length === 0 ? (
-                <p className="text-sm text-muted-foreground">No knowledge sources linked.</p>
+              {linkedKnowledge.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  No knowledge linked yet. Link an existing source below or add a new one.
+                </p>
               ) : (
                 <ul className="space-y-2">
-                  {knowledgeData?.data.map((s) => (
-                    <li key={s.id} className="flex items-center justify-between text-sm">
-                      <span>{s.name}</span>
-                      <Badge variant="secondary">{s.status}</Badge>
+                  {linkedKnowledge.map((s) => (
+                    <li key={s.id} className="flex items-center justify-between rounded-md border px-3 py-2 text-sm">
+                      <div>
+                        <p className="font-medium">{s.name}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {s.type} · {s.chunk_count} chunks
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Badge variant={s.status === "indexed" ? "success" : "secondary"}>{s.status}</Badge>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          title="Unlink from bot"
+                          onClick={() => unlinkKnowledgeMutation.mutate(s.id)}
+                          disabled={unlinkKnowledgeMutation.isPending}
+                        >
+                          <Unlink className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Available Sources</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {availableKnowledge.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  All workspace knowledge is already linked to this bot. Add more from the Knowledge page.
+                </p>
+              ) : (
+                <ul className="space-y-2">
+                  {availableKnowledge.map((s) => (
+                    <li key={s.id} className="flex items-center justify-between rounded-md border px-3 py-2 text-sm">
+                      <div>
+                        <p className="font-medium">{s.name}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {s.type} · {s.chunk_count} chunks
+                          {s.bot_id ? " · linked to another bot" : " · unassigned"}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Badge variant="secondary">{s.status}</Badge>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => linkKnowledgeMutation.mutate(s.id)}
+                          disabled={linkKnowledgeMutation.isPending}
+                        >
+                          <Link2 className="mr-2 h-4 w-4" />
+                          Link
+                        </Button>
+                      </div>
                     </li>
                   ))}
                 </ul>

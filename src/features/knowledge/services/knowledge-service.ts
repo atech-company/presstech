@@ -18,7 +18,7 @@ export const knowledgeService = {
     });
   },
 
-  update(id: string, data: Partial<KnowledgeSource>) {
+  update(id: string, data: Partial<KnowledgeSource> & { recrawl?: boolean; reprocess?: boolean }) {
     return apiPatch<KnowledgeSource>(`/knowledge/${id}`, data);
   },
 
