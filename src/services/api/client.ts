@@ -3,8 +3,16 @@ import { getAuthToken, useAuthStore } from "@/store/auth-store";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
+function getApiBaseUrl(): string {
+  if (typeof window !== "undefined") {
+    return "/api/v1";
+  }
+
+  return `${API_URL}/api/v1`;
+}
+
 export const apiClient = axios.create({
-  baseURL: `${API_URL}/api/v1`,
+  baseURL: getApiBaseUrl(),
   headers: {
     Accept: "application/json",
     "Content-Type": "application/json",
@@ -12,6 +20,10 @@ export const apiClient = axios.create({
 });
 
 apiClient.interceptors.request.use((config) => {
+  if (typeof window !== "undefined") {
+    config.baseURL = "/api/v1";
+  }
+
   const token = getAuthToken();
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
