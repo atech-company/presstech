@@ -46,8 +46,8 @@ export default function BotDetailPage({ params }: { params: Promise<{ id: string
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [instructions, setInstructions] = useState("");
-  const [aiProvider, setAiProvider] = useState("deepseek");
-  const [aiModel, setAiModel] = useState("deepseek-chat");
+  const [aiProvider, setAiProvider] = useState("openrouter");
+  const [aiModel, setAiModel] = useState("openai/gpt-4o-mini");
   const [initialized, setInitialized] = useState(false);
   const [addKnowledgeOpen, setAddKnowledgeOpen] = useState(false);
   const [knowledgeName, setKnowledgeName] = useState("");
@@ -68,8 +68,8 @@ export default function BotDetailPage({ params }: { params: Promise<{ id: string
       setDescription(bot.description ?? "");
       setInstructions(bot.instructions ?? "");
       const settings = bot.settings ?? {};
-      setAiProvider((settings.ai_provider as string) ?? aiProvidersData?.data.default ?? "deepseek");
-      setAiModel((settings.ai_model as string) ?? "deepseek-chat");
+      setAiProvider((settings.ai_provider as string) ?? aiProvidersData?.data.default ?? "openrouter");
+      setAiModel((settings.ai_model as string) ?? "openai/gpt-4o-mini");
       setInitialized(true);
     }
   }, [bot, initialized, aiProvidersData?.data.default]);
@@ -257,6 +257,11 @@ export default function BotDetailPage({ params }: { params: Promise<{ id: string
                       ))}
                     </SelectContent>
                   </Select>
+                  {aiProvider === "openrouter" && (
+                    <p className="text-xs text-muted-foreground">
+                      OpenRouter routes to models like GPT-4o Mini. Change model above if needed.
+                    </p>
+                  )}
                   {aiProvider === "deepseek" && (
                     <p className="text-xs text-muted-foreground">
                       Use <strong>DeepSeek Reasoner</strong> for the most capable answers (slower).
