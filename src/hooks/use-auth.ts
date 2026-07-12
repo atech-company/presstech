@@ -36,7 +36,8 @@ export function useAuth() {
       }
     },
     onError: (err: ApiClientError) => {
-      toast.error(err.message);
+      const fieldMsg = err.errors?.email?.[0] ?? err.errors?.password?.[0];
+      toast.error(fieldMsg ?? err.message);
     },
   });
 
