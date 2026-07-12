@@ -2,8 +2,9 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Copy, ExternalLink, Plug, Trash2 } from "lucide-react";
+import { ExternalLink, Plug, Trash2 } from "lucide-react";
 import { PageHeader } from "@/components/layout/page-header";
 import { integrationService } from "@/features/integrations/services/integration-service";
 import { botService } from "@/features/bots/services/bot-service";
@@ -29,13 +30,12 @@ import {
 import { toast } from "sonner";
 
 export default function IntegrationsPage() {
+  const router = useRouter();
   const workspaceId = useWorkspaceStore((s) => s.currentWorkspace?.id);
   const queryClient = useQueryClient();
   const [connecting, setConnecting] = useState<{ type: string; name: string; description?: string } | null>(null);
   const [configName, setConfigName] = useState("");
-  const [apiToken, setApiToken] = useState("");
   const [personalAccessToken, setPersonalAccessToken] = useState("");
-  const [wasenderSessionId, setWasenderSessionId] = useState("");
   const [botId, setBotId] = useState("");
 
   const { data: catalogData } = useQuery({
@@ -65,23 +65,17 @@ export default function IntegrationsPage() {
         workspace_id: workspaceId!,
         type: connecting!.type,
         name: configName || connecting!.name,
-        credentials: apiToken || undefined,
         config: {
           ...(botId ? { bot_id: botId } : {}),
           ...(personalAccessToken ? { personal_access_token: personalAccessToken } : {}),
-          ...(wasenderSessionId ? { wasender_session_id: wasenderSessionId } : {}),
         },
       }),
     onSuccess: (res) => {
       queryClient.invalidateQueries({ queryKey: ["integrations"] });
-      setConnecting(null);
-      setConfigName("");
-      setApiToken("");
-      setPersonalAccessToken("");
-      setWasenderSessionId("");
-      setBotId("");
-      if (res.data.webhook_url) {
-        toast.success("Connected! Open the integration to test credentials and scan the WhatsApp QR.");
+      resetDialog();
+      if (res.data.type === "whatsapp") {
+        toast.success("Now scan the QR code to connect WhatsApp");
+        router.push(`/integrations/${res.data.id}?setup=whatsapp`);
       } else {
         toast.success("Integration connected");
       }
@@ -97,17 +91,10 @@ export default function IntegrationsPage() {
     },
   });
 
-  function copyWebhook(url: string) {
-    navigator.clipboard.writeText(url);
-    toast.success("Webhook URL copied");
-  }
-
   function resetDialog() {
     setConnecting(null);
     setConfigName("");
-    setApiToken("");
     setPersonalAccessToken("");
-    setWasenderSessionId("");
     setBotId("");
   }
 
@@ -139,21 +126,10 @@ export default function IntegrationsPage() {
                       </Button>
                     </div>
                   </div>
-                  {item.webhook_url && (
-                    <div className="space-y-1">
-                      <p className="text-xs text-muted-foreground">Wasender webhook URL</p>
-                      <div className="flex gap-2">
-                        <Input readOnly value={item.webhook_url} className="text-xs" />
-                        <Button variant="outline" size="icon" onClick={() => copyWebhook(item.webhook_url!)}>
-                          <Copy className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </div>
-                  )}
                   <Button variant="outline" size="sm" className="w-full" asChild>
-                    <Link href={`/integrations/${item.id}`}>
+                    <Link href={`/integrations/${item.id}${item.type === "whatsapp" ? "?setup=whatsapp" : ""}`}>
                       <ExternalLink className="mr-2 h-4 w-4" />
-                      Test &amp; Configure
+                      {item.type === "whatsapp" ? "Connect WhatsApp" : "Configure"}
                     </Link>
                   </Button>
                 </CardContent>
@@ -197,8 +173,7 @@ export default function IntegrationsPage() {
           <div className="space-y-4">
             {isWhatsApp && (
               <p className="text-sm text-muted-foreground">
-                Add your Wasender session API key for sending messages. Add PAT + Session ID to link your phone via QR
-                on the integration test page.
+                Only 2 things needed: pick a bot and paste your Wasender token. Next step: scan QR — webhook and API key are configured automatically.
               </p>
             )}
             <div className="space-y-2">
@@ -206,48 +181,43 @@ export default function IntegrationsPage() {
               <Input value={configName} onChange={(e) => setConfigName(e.target.value)} />
             </div>
             {isWhatsApp && (
-              <div className="space-y-2">
-                <Label>Bot to handle replies</Label>
-                <Select value={botId} onValueChange={setBotId}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select a bot" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {bots.map((bot) => (
-                      <SelectItem key={bot.id} value={bot.id}>
-                        {bot.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
-            <div className="space-y-2">
-              <Label>{isWhatsApp ? "Wasender Session API Key" : "API Token / Key"}</Label>
-              <Input type="password" value={apiToken} onChange={(e) => setApiToken(e.target.value)} />
-            </div>
-            {isWhatsApp && (
               <>
                 <div className="space-y-2">
-                  <Label>Personal Access Token (optional — for QR)</Label>
+                  <Label>Bot to handle replies</Label>
+                  <Select value={botId} onValueChange={setBotId}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select a bot" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {bots.map((bot) => (
+                        <SelectItem key={bot.id} value={bot.id}>{bot.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Wasender Personal Access Token</Label>
                   <Input
                     type="password"
                     value={personalAccessToken}
                     onChange={(e) => setPersonalAccessToken(e.target.value)}
+                    placeholder="Wasender → Settings → Personal Access Token"
                   />
-                </div>
-                <div className="space-y-2">
-                  <Label>Wasender Session ID (optional — for QR)</Label>
-                  <Input value={wasenderSessionId} onChange={(e) => setWasenderSessionId(e.target.value)} />
                 </div>
               </>
             )}
+            {!isWhatsApp && (
+              <div className="space-y-2">
+                <Label>API Token / Key</Label>
+                <Input type="password" />
+              </div>
+            )}
             <Button
               onClick={() => connectMutation.mutate()}
-              disabled={connectMutation.isPending || !apiToken || (isWhatsApp && !botId)}
+              disabled={connectMutation.isPending || (isWhatsApp && (!botId || !personalAccessToken))}
               className="w-full"
             >
-              Connect
+              {isWhatsApp ? "Continue to QR Setup" : "Connect"}
             </Button>
           </div>
         </DialogContent>

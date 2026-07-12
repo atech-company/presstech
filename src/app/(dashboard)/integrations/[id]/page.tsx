@@ -2,14 +2,12 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowLeft,
   CheckCircle2,
-  Copy,
   Loader2,
-  RefreshCw,
   Smartphone,
   XCircle,
 } from "lucide-react";
@@ -29,7 +27,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import type { IntegrationTestResult, WasenderSession } from "@/types/api/integrations";
+import type { WasenderSession } from "@/types/api/integrations";
 import { toast } from "sonner";
 
 function apiErrorMessage(err: unknown, fallback: string) {
@@ -41,24 +39,29 @@ function qrImageUrl(data: string) {
   return `https://api.qrserver.com/v1/create-qr-code/?size=280x280&data=${encodeURIComponent(data)}`;
 }
 
+function StatusRow({ ok, label }: { ok: boolean; label: string }) {
+  return (
+    <div className="flex items-center gap-2 text-sm">
+      {ok ? (
+        <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+      ) : (
+        <XCircle className="h-4 w-4 text-muted-foreground" />
+      )}
+      <span className={ok ? "text-foreground" : "text-muted-foreground"}>{label}</span>
+    </div>
+  );
+}
+
 export default function IntegrationDetailPage() {
   const { id } = useParams<{ id: string }>();
+  const searchParams = useSearchParams();
   const queryClient = useQueryClient();
   const [pat, setPat] = useState("");
   const [sessionId, setSessionId] = useState("");
-  const [sessionApiKey, setSessionApiKey] = useState("");
   const [botId, setBotId] = useState("");
-  const [testResult, setTestResult] = useState<IntegrationTestResult | null>(null);
   const [qrCode, setQrCode] = useState<string | null>(null);
-  const [connectError, setConnectError] = useState<string | null>(null);
+  const [setupError, setSetupError] = useState<string | null>(null);
   const [wasenderSessions, setWasenderSessions] = useState<WasenderSession[]>([]);
-
-  function whatsappCredentials() {
-    return {
-      ...(pat ? { personal_access_token: pat } : {}),
-      ...(sessionId ? { wasender_session_id: sessionId } : {}),
-    };
-  }
 
   const { data, isLoading } = useQuery({
     queryKey: ["integration", id],
@@ -78,7 +81,10 @@ export default function IntegrationDetailPage() {
     queryKey: ["integration-status", id],
     queryFn: () => integrationService.whatsappStatus(id),
     enabled: !!id && isWhatsApp,
-    refetchInterval: (query) => (query.state.data?.data?.connected ? false : 5000),
+    refetchInterval: (query) => {
+      const d = query.state.data?.data;
+      return d?.connected && d?.credentials_saved && d?.webhook_configured ? false : 3000;
+    },
   });
 
   useEffect(() => {
@@ -87,91 +93,78 @@ export default function IntegrationDetailPage() {
     setBotId(String(integration.config?.bot_id ?? ""));
   }, [integration]);
 
-  const saveMutation = useMutation({
-    mutationFn: () =>
-      integrationService.update(id, {
-        config: {
-          ...(integration?.config ?? {}),
-          bot_id: botId || null,
-          wasender_session_id: sessionId || null,
-          ...(pat ? { personal_access_token: pat } : {}),
-        },
-        ...(sessionApiKey ? { credentials: sessionApiKey } : {}),
-      }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["integration", id] });
-      setPat("");
-      setSessionApiKey("");
-      toast.success("Settings saved");
-    },
-    onError: (err) => toast.error(apiErrorMessage(err, "Failed to save settings")),
-  });
-
-  const testMutation = useMutation({
-    mutationFn: () => integrationService.test(id),
-    onSuccess: (res) => {
-      setTestResult(res.data);
-      toast.success(res.data.ok ? "All checks passed" : "Some checks failed");
-    },
-    onError: (err) => toast.error(apiErrorMessage(err, "Test failed")),
-  });
+  useEffect(() => {
+    if (searchParams.get("setup") === "whatsapp" && integration?.config?.personal_access_token_set) {
+      loadSessionsMutation.mutate();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [integration?.id, searchParams]);
 
   const loadSessionsMutation = useMutation({
     mutationFn: () => integrationService.whatsappSessions(id, pat || undefined),
     onSuccess: (res) => {
       const sessions = Array.isArray(res.data) ? res.data : [];
       setWasenderSessions(sessions);
-      if (sessions.length === 0) {
-        toast.error("No sessions found — create a session in Wasender first");
-      } else {
-        toast.success(`Found ${sessions.length} session(s)`);
+      if (sessions.length === 1 && !sessionId) {
+        setSessionId(String(sessions[0].id));
       }
     },
     onError: (err) => toast.error(apiErrorMessage(err, "Failed to load sessions")),
   });
 
-  const connectMutation = useMutation({
-    mutationFn: () => integrationService.whatsappConnect(id, whatsappCredentials()),
-    onSuccess: () => {
-      setConnectError(null);
-      queryClient.invalidateQueries({ queryKey: ["integration", id] });
-      toast.success("Connecting — fetching QR code...");
-      qrMutation.mutate();
-    },
-    onError: (err) => {
-      const message = apiErrorMessage(err, "Failed to start WhatsApp connection");
-      setConnectError(message);
-      toast.error(message);
-    },
-  });
-
-  const qrMutation = useMutation({
-    mutationFn: () => integrationService.whatsappQrCode(id, whatsappCredentials()),
+  const setupMutation = useMutation({
+    mutationFn: () =>
+      integrationService.whatsappSetup(id, {
+        ...(pat ? { personal_access_token: pat } : {}),
+        ...(sessionId ? { wasender_session_id: sessionId } : {}),
+        ...(botId ? { bot_id: botId } : {}),
+      }),
     onSuccess: (res) => {
-      setConnectError(null);
+      setSetupError(null);
       setQrCode(res.data.qrcode);
-      if (!res.data.qrcode) {
-        toast.error("No QR code returned — try Connect again or check Wasender subscription");
-      }
+      queryClient.invalidateQueries({ queryKey: ["integration", id] });
+      queryClient.invalidateQueries({ queryKey: ["integration-status", id] });
+      toast.success("Scan the QR code with WhatsApp on your phone");
     },
     onError: (err) => {
-      const message = apiErrorMessage(err, "Failed to fetch QR code");
-      setConnectError(message);
+      const message = apiErrorMessage(err, "Failed to connect WhatsApp");
+      setSetupError(message);
       toast.error(message);
     },
   });
 
-  function copyWebhook(url: string) {
-    navigator.clipboard.writeText(url);
-    toast.success("Webhook URL copied");
-  }
+  const syncMutation = useMutation({
+    mutationFn: () => integrationService.whatsappSync(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["integration", id] });
+      queryClient.invalidateQueries({ queryKey: ["integration-status", id] });
+    },
+  });
 
   if (isLoading || !integration) {
     return <p className="text-sm text-muted-foreground">Loading integration...</p>;
   }
 
-  const whatsappStatus = statusData?.data;
+  const status = statusData?.data;
   const bots = botsData?.data ?? [];
+  const hasPat = !!pat || integration.config?.personal_access_token_set === true;
+  const ready = !!botId && hasPat;
+
+  if (!isWhatsApp) {
+    return (
+      <div>
+        <Button variant="ghost" size="sm" asChild className="mb-6">
+          <Link href="/integrations"><ArrowLeft className="mr-2 h-4 w-4" />Back</Link>
+        </Button>
+        <PageHeader title={integration.name} description={`${integration.type} integration`} />
+        <Card>
+          <CardContent className="py-8">
+            <p className="text-sm text-muted-foreground">Open integration settings from the integrations list.</p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div>
@@ -186,244 +179,123 @@ export default function IntegrationDetailPage() {
 
       <PageHeader
         title={integration.name}
-        description={`${integration.type} integration — test credentials and manage connection`}
+        description="Connect WhatsApp in 2 steps — scan QR and you're live"
         action={
-          <Badge variant={integration.status === "active" ? "success" : "secondary"}>
-            {integration.status}
+          <Badge variant={status?.connected ? "success" : "warning"}>
+            {status?.connected ? "Connected" : "Not connected"}
           </Badge>
         }
       />
 
-      <div className="grid gap-6 lg:grid-cols-2">
+      <div className="mx-auto grid max-w-lg gap-6">
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Test Connection</CardTitle>
-            <CardDescription>Verify that your credentials work before going live</CardDescription>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Smartphone className="h-5 w-5" />
+              WhatsApp Setup
+            </CardTitle>
+            <CardDescription>
+              We auto-configure the webhook and API key from your Wasender account after you scan the QR.
+            </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <Button onClick={() => testMutation.mutate()} disabled={testMutation.isPending}>
-              {testMutation.isPending ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              ) : (
-                <RefreshCw className="mr-2 h-4 w-4" />
-              )}
-              Run Test
-            </Button>
+            <div className="space-y-2">
+              <Label>Bot to reply on WhatsApp</Label>
+              <Select value={botId} onValueChange={setBotId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select a bot" />
+                </SelectTrigger>
+                <SelectContent>
+                  {bots.map((bot) => (
+                    <SelectItem key={bot.id} value={bot.id}>{bot.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
 
-            {testResult && (
-              <div className="space-y-3 rounded-lg border p-4">
-                <div className="flex items-center gap-2">
-                  {testResult.ok ? (
-                    <CheckCircle2 className="h-5 w-5 text-emerald-500" />
-                  ) : (
-                    <XCircle className="h-5 w-5 text-destructive" />
-                  )}
-                  <span className="font-medium">
-                    {testResult.ok ? "Credentials look good" : "Issues found"}
-                  </span>
-                </div>
+            <div className="space-y-2">
+              <Label>
+                Wasender Personal Access Token
+                {integration.config?.personal_access_token_set === true && " (saved)"}
+              </Label>
+              <Input
+                type="password"
+                value={pat}
+                onChange={(e) => setPat(e.target.value)}
+                placeholder="From Wasender → Settings → Personal Access Token"
+              />
+            </div>
 
-                {testResult.checks ? (
-                  Object.entries(testResult.checks).map(([key, check]) => (
-                    <div key={key} className="rounded-md bg-muted/50 p-3 text-sm">
-                      <div className="flex items-center gap-2 font-medium">
-                        {check.ok ? (
-                          <CheckCircle2 className="h-4 w-4 text-emerald-500" />
-                        ) : (
-                          <XCircle className="h-4 w-4 text-destructive" />
-                        )}
-                        {key.replace(/_/g, " ")}
-                      </div>
-                      <p className="mt-1 text-muted-foreground">{check.message}</p>
-                      {check.url && (
-                        <div className="mt-2 flex gap-2">
-                          <Input readOnly value={check.url} className="text-xs" />
-                          <Button variant="outline" size="icon" onClick={() => copyWebhook(check.url!)}>
-                            <Copy className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      )}
-                    </div>
-                  ))
-                ) : (
-                  <p className="text-sm text-muted-foreground">{testResult.message}</p>
-                )}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Settings</CardTitle>
-            <CardDescription>Update credentials and bot assignment</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {isWhatsApp && (
-              <>
-                <div className="space-y-2">
-                  <Label>Bot to handle replies</Label>
-                  <Select value={botId} onValueChange={setBotId}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select a bot" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {bots.map((bot) => (
-                        <SelectItem key={bot.id} value={bot.id}>
-                          {bot.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label>Session API Key {integration.has_credentials && "(saved — leave blank to keep)"}</Label>
-                  <Input
-                    type="password"
-                    value={sessionApiKey}
-                    onChange={(e) => setSessionApiKey(e.target.value)}
-                    placeholder="For sending messages (from Wasender session page)"
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    Different from PAT — this is the per-session key used to send WhatsApp replies.
-                  </p>
-                </div>
-                <div className="space-y-2">
-                  <Label>
-                    Personal Access Token (for QR)
-                    {integration.config?.personal_access_token_set === true && " (saved — leave blank to keep)"}
-                  </Label>
-                  <Input
-                    type="password"
-                    value={pat}
-                    onChange={(e) => setPat(e.target.value)}
-                    placeholder="Wasender → Settings → Personal Access Token"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Wasender Session ID (numeric)</Label>
-                  <div className="flex gap-2">
-                    <Input
-                      value={sessionId}
-                      onChange={(e) => setSessionId(e.target.value)}
-                      placeholder="e.g. 12345"
-                    />
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() => loadSessionsMutation.mutate()}
-                      disabled={loadSessionsMutation.isPending || (!pat && !integration.config?.personal_access_token_set)}
-                    >
-                      Load
-                    </Button>
-                  </div>
-                  {wasenderSessions.length > 0 && (
-                    <Select value={sessionId} onValueChange={setSessionId}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Pick a session" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {wasenderSessions.map((session) => (
-                          <SelectItem key={session.id} value={String(session.id)}>
-                            #{session.id} {session.name ?? ""} {session.status ? `(${session.status})` : ""}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  )}
-                  <p className="text-xs text-muted-foreground">
-                    Not the API key — the numeric session ID from Wasender → Sessions.
-                  </p>
-                </div>
-              </>
-            )}
-
-            {integration.webhook_url && (
-              <div className="space-y-2">
-                <Label>Webhook URL (paste in Wasender)</Label>
-                <div className="flex gap-2">
-                  <Input readOnly value={integration.webhook_url} className="text-xs" />
-                  <Button variant="outline" size="icon" onClick={() => copyWebhook(integration.webhook_url!)}>
-                    <Copy className="h-4 w-4" />
-                  </Button>
-                </div>
-              </div>
-            )}
-
-            <Button onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending} className="w-full">
-              Save Settings
-            </Button>
-          </CardContent>
-        </Card>
-
-        {isWhatsApp && (
-          <Card className="lg:col-span-2">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-base">
-                <Smartphone className="h-5 w-5" />
-                Link WhatsApp on Mobile
-              </CardTitle>
-              <CardDescription>
-                Save your Personal Access Token and Session ID, then scan the QR code with WhatsApp on your phone
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex flex-wrap items-center gap-3">
-                <Badge variant={whatsappStatus?.connected ? "success" : "warning"}>
-                  {whatsappStatus?.connected ? "Connected" : "Not connected"}
-                </Badge>
-                <Button variant="outline" size="sm" onClick={() => refetchStatus()}>
-                  Refresh status
-                </Button>
-              </div>
-
-              <ol className="list-decimal space-y-1 pl-5 text-sm text-muted-foreground">
-                <li>Enter PAT → click <strong>Load</strong> → pick your session ID</li>
-                <li>Click <strong>Connect &amp; Get QR</strong> (saves credentials automatically)</li>
-                <li>Scan with WhatsApp → Linked Devices</li>
-                <li>Paste webhook URL into Wasender and enable messages.received</li>
-              </ol>
-
-              {connectError && (
-                <div className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
-                  {connectError}
-                </div>
-              )}
-
-              <div className="flex flex-wrap gap-3">
+            <div className="space-y-2">
+              <Label>Wasender session (optional)</Label>
+              <div className="flex gap-2">
+                <Select value={sessionId} onValueChange={setSessionId}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Auto-pick first session" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {wasenderSessions.map((session) => (
+                      <SelectItem key={session.id} value={String(session.id)}>
+                        #{session.id} {session.name ?? ""} {session.status ? `(${session.status})` : ""}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
                 <Button
-                  onClick={() => {
-                    if (!sessionId) {
-                      toast.error("Enter or select a Wasender Session ID");
-                      return;
-                    }
-                    if (!pat && !integration.config?.personal_access_token_set) {
-                      toast.error("Enter your Personal Access Token first");
-                      return;
-                    }
-                    connectMutation.mutate();
-                  }}
-                  disabled={connectMutation.isPending}
+                  type="button"
+                  variant="outline"
+                  onClick={() => loadSessionsMutation.mutate()}
+                  disabled={loadSessionsMutation.isPending || !hasPat}
                 >
-                  {connectMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                  Connect &amp; Get QR
-                </Button>
-                <Button variant="outline" onClick={() => qrMutation.mutate()} disabled={qrMutation.isPending}>
-                  Refresh QR
+                  Load
                 </Button>
               </div>
+              <p className="text-xs text-muted-foreground">
+                Leave empty to use your first Wasender session automatically.
+              </p>
+            </div>
 
-              {qrCode && (
-                <div className="flex flex-col items-start gap-3 rounded-lg border p-4">
-                  <p className="text-sm font-medium">Scan with WhatsApp</p>
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={qrImageUrl(qrCode)} alt="WhatsApp QR code" className="rounded-md border" width={280} height={280} />
-                  <p className="max-w-md break-all text-xs text-muted-foreground">{qrCode}</p>
-                </div>
+            {setupError && (
+              <div className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
+                {setupError}
+              </div>
+            )}
+
+            <Button
+              className="w-full"
+              size="lg"
+              disabled={!ready || setupMutation.isPending}
+              onClick={() => setupMutation.mutate()}
+            >
+              {setupMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Connect WhatsApp &amp; Show QR
+            </Button>
+
+            {qrCode && (
+              <div className="flex flex-col items-center gap-3 rounded-lg border bg-muted/30 p-6">
+                <p className="font-medium">Scan with WhatsApp → Linked Devices</p>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={qrImageUrl(qrCode)} alt="WhatsApp QR code" className="rounded-md border bg-white" width={280} height={280} />
+              </div>
+            )}
+
+            <div className="space-y-2 rounded-lg border p-4">
+              <p className="text-sm font-medium">Auto-setup status</p>
+              <StatusRow ok={!!status?.connected} label="WhatsApp connected" />
+              <StatusRow ok={!!status?.webhook_configured} label="Webhook configured on Wasender" />
+              <StatusRow ok={!!status?.credentials_saved || integration.has_credentials} label="Session API key saved" />
+              {status?.webhook_url && (
+                <p className="pt-1 text-xs text-muted-foreground break-all">
+                  Webhook: {status.webhook_url}
+                </p>
               )}
-            </CardContent>
-          </Card>
-        )}
+            </div>
+
+            <Button variant="outline" className="w-full" onClick={() => refetchStatus()} disabled={syncMutation.isPending}>
+              Refresh status
+            </Button>
+          </CardContent>
+        </Card>
       </div>
     </div>
   );

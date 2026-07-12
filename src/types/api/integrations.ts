@@ -41,8 +41,22 @@ export interface WhatsAppQrResponse {
 
 export interface WhatsAppStatusResponse {
   connected: boolean;
-  session_api: Record<string, unknown> | null;
-  session: Record<string, unknown> | null;
+  credentials_saved?: boolean;
+  webhook_configured?: boolean;
+  webhook_url?: string;
+  session_status?: string | null;
+  session_api?: Record<string, unknown> | null;
+  session?: Record<string, unknown> | null;
+}
+
+export interface WhatsAppSetupResponse {
+  session_id: string;
+  qrcode: string | null;
+  webhook_url: string;
+  webhook_configured: boolean;
+  connected: boolean;
+  credentials_saved: boolean;
+  session_status: string | null;
 }
 
 export interface WasenderSession {

@@ -4,7 +4,7 @@ import type {
   IntegrationCatalogItem,
   IntegrationTestResult,
   WasenderSession,
-  WhatsAppQrResponse,
+  WhatsAppSetupResponse,
   WhatsAppStatusResponse,
 } from "@/types/api/integrations";
 
@@ -50,16 +50,19 @@ export const integrationService = {
     return apiGet<WasenderSession[]>(`/integrations/${id}/whatsapp/sessions${params}`);
   },
 
-  whatsappConnect(id: string, data?: { personal_access_token?: string; wasender_session_id?: string }) {
-    return apiPost<Record<string, unknown>>(`/integrations/${id}/whatsapp/connect`, data ?? {});
+  whatsappSetup(
+    id: string,
+    data?: { personal_access_token?: string; wasender_session_id?: string; bot_id?: string }
+  ) {
+    return apiPost<WhatsAppSetupResponse>(`/integrations/${id}/whatsapp/setup`, data ?? {});
   },
 
-  whatsappQrCode(id: string, data?: { personal_access_token?: string; wasender_session_id?: string }) {
-    const params = new URLSearchParams();
-    if (data?.personal_access_token) params.set("personal_access_token", data.personal_access_token);
-    if (data?.wasender_session_id) params.set("wasender_session_id", data.wasender_session_id);
-    const qs = params.toString();
-    return apiGet<WhatsAppQrResponse>(`/integrations/${id}/whatsapp/qrcode${qs ? `?${qs}` : ""}`);
+  whatsappSync(id: string) {
+    return apiPost<WhatsAppStatusResponse>(`/integrations/${id}/whatsapp/sync`, {});
+  },
+
+  whatsappConnect(id: string, data?: { personal_access_token?: string; wasender_session_id?: string }) {
+    return apiPost<Record<string, unknown>>(`/integrations/${id}/whatsapp/connect`, data ?? {});
   },
 
   whatsappStatus(id: string) {
