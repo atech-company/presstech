@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
-const publicRoutes = ["/login", "/register", "/forgot-password", "/verify-email"];
+const publicRoutes = ["/login", "/register", "/forgot-password", "/verify-email", "/embed"];
 
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -34,6 +34,6 @@ export function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|mockServiceWorker.js|api|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+    "/((?!_next/static|_next/image|favicon.ico|mockServiceWorker.js|widget.js|api|.*\\.(?:svg|png|jpg|jpeg|gif|webp|js)$).*)",
   ],
 };

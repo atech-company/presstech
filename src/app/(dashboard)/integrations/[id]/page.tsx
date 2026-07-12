@@ -7,6 +7,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowLeft,
   CheckCircle2,
+  Copy,
+  Globe,
   Loader2,
   Smartphone,
   XCircle,
@@ -70,6 +72,7 @@ export default function IntegrationDetailPage() {
 
   const integration = data?.data;
   const isWhatsApp = integration?.type === "whatsapp";
+  const isWebsite = integration?.type === "website";
 
   const { data: botsData } = useQuery({
     queryKey: ["bots", integration?.workspace_id],
@@ -149,6 +152,83 @@ export default function IntegrationDetailPage() {
   const bots = botsData?.data ?? [];
   const hasPat = !!pat || integration.config?.personal_access_token_set === true;
   const ready = !!botId && hasPat;
+
+  if (isWebsite) {
+    return (
+      <div>
+        <div className="mb-6">
+          <Button variant="ghost" size="sm" asChild>
+            <Link href="/integrations">
+              <ArrowLeft className="mr-2 h-4 w-4" />
+              Back to Integrations
+            </Link>
+          </Button>
+        </div>
+
+        <PageHeader
+          title={integration.name}
+          description="Paste the embed code on your website — visitors can chat with your bot"
+          action={<Badge variant="success">Active</Badge>}
+        />
+
+        <div className="mx-auto grid max-w-2xl gap-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Globe className="h-5 w-5" />
+                Website Chat Widget
+              </CardTitle>
+              <CardDescription>
+                Add this script before &lt;/body&gt; on any page. A chat bubble appears in the corner — same AI and knowledge as your bot.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {integration.embed_code ? (
+                <>
+                  <div className="space-y-2">
+                    <Label>Embed code</Label>
+                    <textarea
+                      readOnly
+                      className="min-h-[80px] w-full rounded-md border bg-muted/40 p-3 font-mono text-xs"
+                      value={integration.embed_code}
+                    />
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        navigator.clipboard.writeText(integration.embed_code!);
+                        toast.success("Embed code copied");
+                      }}
+                    >
+                      <Copy className="mr-2 h-4 w-4" />
+                      Copy embed code
+                    </Button>
+                  </div>
+
+                  {integration.embed_url && (
+                    <div className="space-y-2">
+                      <Label>Preview</Label>
+                      <Button variant="outline" asChild>
+                        <a href={integration.embed_url} target="_blank" rel="noopener noreferrer">
+                          Open chat preview
+                        </a>
+                      </Button>
+                    </div>
+                  )}
+
+                  <div className="space-y-2 rounded-lg border p-4 text-sm">
+                    <StatusRow ok={!!integration.config?.bot_id} label="Bot linked" />
+                    <StatusRow ok={!!integration.config?.embed_token_set} label="Secure embed token active" />
+                  </div>
+                </>
+              ) : (
+                <p className="text-sm text-muted-foreground">Embed code not available. Re-create the website integration.</p>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    );
+  }
 
   if (!isWhatsApp) {
     return (

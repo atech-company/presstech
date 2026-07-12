@@ -76,6 +76,9 @@ export default function IntegrationsPage() {
       if (res.data.type === "whatsapp") {
         toast.success("Now scan the QR code to connect WhatsApp");
         router.push(`/integrations/${res.data.id}?setup=whatsapp`);
+      } else if (res.data.type === "website") {
+        toast.success("Copy the embed code and paste it on your website");
+        router.push(`/integrations/${res.data.id}`);
       } else {
         toast.success("Integration connected");
       }
@@ -99,6 +102,8 @@ export default function IntegrationsPage() {
   }
 
   const isWhatsApp = connecting?.type === "whatsapp";
+  const isWebsite = connecting?.type === "website";
+  const needsBot = isWhatsApp || isWebsite;
 
   return (
     <div>
@@ -129,7 +134,7 @@ export default function IntegrationsPage() {
                   <Button variant="outline" size="sm" className="w-full" asChild>
                     <Link href={`/integrations/${item.id}${item.type === "whatsapp" ? "?setup=whatsapp" : ""}`}>
                       <ExternalLink className="mr-2 h-4 w-4" />
-                      {item.type === "whatsapp" ? "Connect WhatsApp" : "Configure"}
+                      {item.type === "whatsapp" ? "Connect WhatsApp" : item.type === "website" ? "Get Embed Code" : "Configure"}
                     </Link>
                   </Button>
                 </CardContent>
@@ -176,37 +181,42 @@ export default function IntegrationsPage() {
                 Only 2 things needed: pick a bot and paste your Wasender token. Next step: scan QR — webhook and API key are configured automatically.
               </p>
             )}
+            {isWebsite && (
+              <p className="text-sm text-muted-foreground">
+                Pick a bot and we generate an embed script. Paste it on your site — visitors get a chat bubble with the same AI and knowledge.
+              </p>
+            )}
             <div className="space-y-2">
               <Label>Display Name</Label>
               <Input value={configName} onChange={(e) => setConfigName(e.target.value)} />
             </div>
-            {isWhatsApp && (
-              <>
-                <div className="space-y-2">
-                  <Label>Bot to handle replies</Label>
-                  <Select value={botId} onValueChange={setBotId}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select a bot" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {bots.map((bot) => (
-                        <SelectItem key={bot.id} value={bot.id}>{bot.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label>Wasender Personal Access Token</Label>
-                  <Input
-                    type="password"
-                    value={personalAccessToken}
-                    onChange={(e) => setPersonalAccessToken(e.target.value)}
-                    placeholder="Wasender → Settings → Personal Access Token"
-                  />
-                </div>
-              </>
+            {(isWhatsApp || isWebsite) && (
+              <div className="space-y-2">
+                <Label>Bot to handle replies</Label>
+                <Select value={botId} onValueChange={setBotId}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select a bot" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {bots.map((bot) => (
+                      <SelectItem key={bot.id} value={bot.id}>{bot.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             )}
-            {!isWhatsApp && (
+            {isWhatsApp && (
+              <div className="space-y-2">
+                <Label>Wasender Personal Access Token</Label>
+                <Input
+                  type="password"
+                  value={personalAccessToken}
+                  onChange={(e) => setPersonalAccessToken(e.target.value)}
+                  placeholder="Wasender → Settings → Personal Access Token"
+                />
+              </div>
+            )}
+            {!needsBot && (
               <div className="space-y-2">
                 <Label>API Token / Key</Label>
                 <Input type="password" />
@@ -214,10 +224,14 @@ export default function IntegrationsPage() {
             )}
             <Button
               onClick={() => connectMutation.mutate()}
-              disabled={connectMutation.isPending || (isWhatsApp && (!botId || !personalAccessToken))}
+              disabled={
+                connectMutation.isPending ||
+                (isWhatsApp && (!botId || !personalAccessToken)) ||
+                (isWebsite && !botId)
+              }
               className="w-full"
             >
-              {isWhatsApp ? "Continue to QR Setup" : "Connect"}
+              {isWhatsApp ? "Continue to QR Setup" : isWebsite ? "Create Website Chat" : "Connect"}
             </Button>
           </div>
         </DialogContent>

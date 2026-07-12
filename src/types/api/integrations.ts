@@ -14,6 +14,8 @@ export interface Integration {
   config: Record<string, unknown> | null;
   has_credentials: boolean;
   webhook_url?: string | null;
+  embed_code?: string | null;
+  embed_url?: string | null;
   created_at: string;
   updated_at: string;
 }
