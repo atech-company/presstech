@@ -1,8 +1,9 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Copy, Plug, Trash2 } from "lucide-react";
+import { Copy, ExternalLink, Plug, Trash2 } from "lucide-react";
 import { PageHeader } from "@/components/layout/page-header";
 import { integrationService } from "@/features/integrations/services/integration-service";
 import { botService } from "@/features/bots/services/bot-service";
@@ -33,6 +34,8 @@ export default function IntegrationsPage() {
   const [connecting, setConnecting] = useState<{ type: string; name: string; description?: string } | null>(null);
   const [configName, setConfigName] = useState("");
   const [apiToken, setApiToken] = useState("");
+  const [personalAccessToken, setPersonalAccessToken] = useState("");
+  const [wasenderSessionId, setWasenderSessionId] = useState("");
   const [botId, setBotId] = useState("");
 
   const { data: catalogData } = useQuery({
@@ -63,16 +66,22 @@ export default function IntegrationsPage() {
         type: connecting!.type,
         name: configName || connecting!.name,
         credentials: apiToken || undefined,
-        config: botId ? { bot_id: botId } : undefined,
+        config: {
+          ...(botId ? { bot_id: botId } : {}),
+          ...(personalAccessToken ? { personal_access_token: personalAccessToken } : {}),
+          ...(wasenderSessionId ? { wasender_session_id: wasenderSessionId } : {}),
+        },
       }),
     onSuccess: (res) => {
       queryClient.invalidateQueries({ queryKey: ["integrations"] });
       setConnecting(null);
       setConfigName("");
       setApiToken("");
+      setPersonalAccessToken("");
+      setWasenderSessionId("");
       setBotId("");
       if (res.data.webhook_url) {
-        toast.success("Connected! Copy the webhook URL into your Wasender session settings.");
+        toast.success("Connected! Open the integration to test credentials and scan the WhatsApp QR.");
       } else {
         toast.success("Integration connected");
       }
@@ -91,6 +100,15 @@ export default function IntegrationsPage() {
   function copyWebhook(url: string) {
     navigator.clipboard.writeText(url);
     toast.success("Webhook URL copied");
+  }
+
+  function resetDialog() {
+    setConnecting(null);
+    setConfigName("");
+    setApiToken("");
+    setPersonalAccessToken("");
+    setWasenderSessionId("");
+    setBotId("");
   }
 
   const isWhatsApp = connecting?.type === "whatsapp";
@@ -132,6 +150,12 @@ export default function IntegrationsPage() {
                       </div>
                     </div>
                   )}
+                  <Button variant="outline" size="sm" className="w-full" asChild>
+                    <Link href={`/integrations/${item.id}`}>
+                      <ExternalLink className="mr-2 h-4 w-4" />
+                      Test &amp; Configure
+                    </Link>
+                  </Button>
                 </CardContent>
               </Card>
             ))}
@@ -165,7 +189,7 @@ export default function IntegrationsPage() {
         </div>
       )}
 
-      <Dialog open={!!connecting} onOpenChange={(o) => !o && setConnecting(null)}>
+      <Dialog open={!!connecting} onOpenChange={(o) => !o && resetDialog()}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Connect {connecting?.name}</DialogTitle>
@@ -173,8 +197,8 @@ export default function IntegrationsPage() {
           <div className="space-y-4">
             {isWhatsApp && (
               <p className="text-sm text-muted-foreground">
-                Use your Wasender session API key. After connecting, paste the webhook URL into your Wasender session
-                settings and enable <code className="text-xs">messages.received</code> events.
+                Add your Wasender session API key for sending messages. Add PAT + Session ID to link your phone via QR
+                on the integration test page.
               </p>
             )}
             <div className="space-y-2">
@@ -199,9 +223,25 @@ export default function IntegrationsPage() {
               </div>
             )}
             <div className="space-y-2">
-              <Label>{isWhatsApp ? "Wasender API Key" : "API Token / Key"}</Label>
+              <Label>{isWhatsApp ? "Wasender Session API Key" : "API Token / Key"}</Label>
               <Input type="password" value={apiToken} onChange={(e) => setApiToken(e.target.value)} />
             </div>
+            {isWhatsApp && (
+              <>
+                <div className="space-y-2">
+                  <Label>Personal Access Token (optional — for QR)</Label>
+                  <Input
+                    type="password"
+                    value={personalAccessToken}
+                    onChange={(e) => setPersonalAccessToken(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Wasender Session ID (optional — for QR)</Label>
+                  <Input value={wasenderSessionId} onChange={(e) => setWasenderSessionId(e.target.value)} />
+                </div>
+              </>
+            )}
             <Button
               onClick={() => connectMutation.mutate()}
               disabled={connectMutation.isPending || !apiToken || (isWhatsApp && !botId)}

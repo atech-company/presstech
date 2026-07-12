@@ -25,4 +25,12 @@ export const knowledgeService = {
   delete(id: string) {
     return apiDelete(`/knowledge/${id}`);
   },
+
+  recrawl(id: string) {
+    return apiPost<KnowledgeSource>(`/knowledge/${id}/recrawl`, {});
+  },
+
+  reprocess(id: string) {
+    return apiPost<KnowledgeSource>(`/knowledge/${id}/reprocess`, {});
+  },
 };
