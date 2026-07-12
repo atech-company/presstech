@@ -11,11 +11,15 @@ const cookieStorage: StateStorage = {
   setItem(name: string, value: string): void {
     if (typeof document === "undefined") return;
     const maxAge = 60 * 60 * 24 * 7;
-    document.cookie = `${name}=${encodeURIComponent(value)}; path=/; max-age=${maxAge}; SameSite=Lax`;
+    const secure =
+      typeof window !== "undefined" && window.location.protocol === "https:";
+    document.cookie = `${name}=${encodeURIComponent(value)}; path=/; max-age=${maxAge}; SameSite=Lax${secure ? "; Secure" : ""}`;
   },
   removeItem(name: string): void {
     if (typeof document === "undefined") return;
-    document.cookie = `${name}=; path=/; max-age=0; SameSite=Lax`;
+    const secure =
+      typeof window !== "undefined" && window.location.protocol === "https:";
+    document.cookie = `${name}=; path=/; max-age=0; SameSite=Lax${secure ? "; Secure" : ""}`;
   },
 };
 

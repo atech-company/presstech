@@ -68,12 +68,12 @@ presstech/
 
 ## Deployment
 
-| App | Platform |
-|-----|----------|
-| Frontend (`/`) | [Vercel](https://vercel.com) |
-| API (`/backend`) | Shared PHP hosting (document root → `backend/public`) |
+| App | Platform | Production URL |
+|-----|----------|----------------|
+| Frontend (`/`) | [Vercel](https://vercel.com) | https://presstech.vercel.app |
+| API (`/backend`) | Shared PHP hosting | https://presstech.atechleb.com |
 
-See **[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)** for step-by-step instructions, environment variables, cron jobs, and CORS/cookie setup.
+See **[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)** for step-by-step instructions.
 
 ## Environment Variables
 

@@ -1,94 +1,98 @@
 # PressTech Deployment Guide
 
-Production setup: **Laravel API on shared PHP hosting** + **Next.js frontend on Vercel**.
+Production URLs:
 
-## Architecture
-
-| Component | Host | Example URL |
-|-----------|------|-------------|
-| Next.js frontend | Vercel | `https://yourdomain.com` |
-| Laravel API | Shared hosting (subdomain) | `https://api.yourdomain.com` |
-| MySQL database | Shared hosting | Provided by host |
-| File storage | Shared hosting / S3 | `storage/` or object storage |
-| Queue | Database driver + cron | No Redis required |
-| Cache | File driver | No Redis required |
-
-> **Auth note:** Session cookies require the frontend and API to share the same root domain (e.g. `yourdomain.com` + `api.yourdomain.com`). Point a custom domain at your Vercel project — do not rely on `*.vercel.app` for production login.
+| Component | URL |
+|-----------|-----|
+| **Frontend** | https://presstech.vercel.app |
+| **Backend API** | https://presstech.atechleb.com |
 
 ---
 
-## 1. Backend — Shared Hosting (Laravel)
+## Architecture
+
+| Component | Host | URL |
+|-----------|------|-----|
+| Next.js frontend | Vercel | `https://presstech.vercel.app` |
+| Laravel API | Shared PHP hosting (atechleb.com) | `https://presstech.atechleb.com` |
+| MySQL | Shared hosting | Provided by host |
+| Queue | Database driver + cron | No Redis required |
+
+> **Auth note:** Frontend and API are on different domains (`vercel.app` vs `atechleb.com`). Session cookies use `SameSite=None; Secure`. Both domains must use HTTPS.
+
+---
+
+## 1. Backend — presstech.atechleb.com
 
 ### Requirements
 
 - PHP 8.3+
 - MySQL 8.0+ or MariaDB 10.6+
-- Composer (run locally, upload vendor, or use host SSH)
+- Composer
 - Extensions: `pdo_mysql`, `mbstring`, `openssl`, `tokenizer`, `xml`, `ctype`, `json`, `bcmath`, `fileinfo`
 
-### Upload layout
+### Hostinger / cPanel setup
 
-Create a subdomain (e.g. `api.yourdomain.com`) and set its **document root** to:
+1. Create subdomain **`presstech`** → `presstech.atechleb.com`
+2. Set **document root** to the `backend/public` folder inside your upload:
+   ```
+   /home/user/domains/atechleb.com/public_html/presstech/backend/public
+   ```
+3. Enable **Free SSL** for `presstech.atechleb.com`
+4. Create a MySQL database and user in the hosting panel
 
-```
-/path/to/your-site/backend/public
-```
+### Upload
 
-Upload the entire `backend/` folder. The web server must only expose `public/`.
+Upload the entire `backend/` folder (via FTP, File Manager, or Git). Do **not** expose anything outside `public/`.
 
-### Install (SSH or local build)
+### Install (SSH or local, then upload vendor)
 
 ```bash
 cd backend
 composer install --no-dev --optimize-autoloader
-cp .env.example .env
+cp .env.production.example .env
 php artisan key:generate
 php artisan migrate --force
+php artisan db:seed --force
 php artisan storage:link
 php artisan config:cache
 php artisan route:cache
 ```
 
-### Production `.env` (shared hosting)
+### Production `.env`
+
+Use `backend/.env.production.example` as the template. Key values:
 
 ```env
-APP_NAME=PressTech
 APP_ENV=production
 APP_DEBUG=false
-APP_URL=https://api.yourdomain.com
+APP_URL=https://presstech.atechleb.com
 
-DB_CONNECTION=mysql
-DB_HOST=localhost
-DB_PORT=3306
+FRONTEND_URL=https://presstech.vercel.app
+CORS_ALLOWED_ORIGINS=https://presstech.vercel.app
+
+SESSION_DOMAIN=presstech.atechleb.com
+SESSION_SECURE_COOKIE=true
+SESSION_SAME_SITE=none
+
+SANCTUM_STATEFUL_DOMAINS=presstech.vercel.app
+
 DB_DATABASE=your_db_name
 DB_USERNAME=your_db_user
 DB_PASSWORD=your_db_password
 
-CACHE_STORE=file
 QUEUE_CONNECTION=database
-SESSION_DRIVER=database
-SESSION_DOMAIN=.yourdomain.com
-SESSION_SECURE_COOKIE=true
-SESSION_SAME_SITE=none
-
-SANCTUM_STATEFUL_DOMAINS=yourdomain.com,www.yourdomain.com
-FRONTEND_URL=https://yourdomain.com
-
-FILESYSTEM_DISK=local
 ```
 
-### Cron jobs (hPanel → Cron Jobs)
+Add your AI keys (`DEEPSEEK_API_KEY`, `OPENROUTER_API_KEY`, etc.).
 
-**Scheduler** (every minute):
+### Cron jobs (required for knowledge indexing + queues)
 
-```cron
-* * * * * cd /home/user/api.yourdomain.com/backend && php artisan schedule:run >> /dev/null 2>&1
-```
-
-**Queue worker** (every minute — shared hosting has no long-running processes):
+In hPanel → **Cron Jobs**, add both (adjust path):
 
 ```cron
-* * * * * cd /home/user/api.yourdomain.com/backend && php artisan queue:work --stop-when-empty --max-time=55 >> /dev/null 2>&1
+* * * * * cd /home/user/.../backend && php artisan schedule:run >> /dev/null 2>&1
+* * * * * cd /home/user/.../backend && php artisan queue:work --stop-when-empty --max-time=55 >> /dev/null 2>&1
 ```
 
 ### Permissions
@@ -97,80 +101,89 @@ FILESYSTEM_DISK=local
 chmod -R 775 storage bootstrap/cache
 ```
 
-### SSL
-
-Enable free SSL in your hosting panel for `api.yourdomain.com`.
-
 ### Health check
 
-`GET https://api.yourdomain.com/up` should return `200 OK`.
+```bash
+curl https://presstech.atechleb.com/up
+```
+
+Should return `200 OK`.
+
+### WhatsApp webhooks (Wasender)
+
+Webhook URL format:
+```
+https://presstech.atechleb.com/api/v1/webhooks/{integration-id}
+```
+
+Set this in your Wasender session settings after connecting WhatsApp in the dashboard.
 
 ---
 
-## 2. Frontend — Vercel
+## 2. Frontend — presstech.vercel.app
 
 ### Connect repository
 
-1. Import the repo in [Vercel](https://vercel.com).
-2. **Root Directory:** leave as repo root (Next.js app is at `/`).
-3. **Framework Preset:** Next.js (auto-detected).
-4. **Build Command:** `npm run build`
-5. **Output:** default (Next.js App Router)
+1. Import [atech-company/presstech](https://github.com/atech-company/presstech) in [Vercel](https://vercel.com)
+2. **Root Directory:** repo root (`/`)
+3. **Framework:** Next.js (auto-detected)
 
-### Environment variables (Vercel → Settings → Environment Variables)
+### Environment variables
 
-| Variable | Value |
-|----------|-------|
-| `NEXT_PUBLIC_API_URL` | `https://api.yourdomain.com` |
+Set in Vercel → Project → Settings → Environment Variables:
 
-For local MSW mocks during development only:
+| Variable | Production value |
+|----------|------------------|
+| `NEXT_PUBLIC_API_URL` | `https://presstech.atechleb.com` |
 
-| Variable | Value |
-|----------|-------|
-| `NEXT_PUBLIC_USE_MOCKS` | `true` |
+`vercel.json` already sets this as a default — confirm it in the Vercel dashboard.
 
 Do **not** set `NEXT_PUBLIC_USE_MOCKS` in production.
 
-### Custom domain
-
-1. Vercel → Project → Settings → Domains → add `yourdomain.com`.
-2. Point DNS (A/CNAME) as Vercel instructs.
-3. Enable SSL (automatic on Vercel).
-
 ### Deploy
 
-Push to your connected branch — Vercel builds and deploys automatically.
+Push to `master` — Vercel builds automatically. Your app will be at:
+
+**https://presstech.vercel.app**
+
+### Optional custom domain
+
+To use your own domain later (e.g. `app.atechleb.com`):
+
+1. Add domain in Vercel → Settings → Domains
+2. Update backend `.env`:
+   - `FRONTEND_URL=https://app.atechleb.com`
+   - `CORS_ALLOWED_ORIGINS=https://app.atechleb.com`
+   - `SANCTUM_STATEFUL_DOMAINS=app.atechleb.com`
+3. Run `php artisan config:cache` on the server
 
 ---
 
-## 3. CORS & cookies checklist
+## 3. Post-deploy checklist
 
-After both sides are live:
+- [ ] `https://presstech.atechleb.com/up` returns 200
+- [ ] `https://presstech.vercel.app` loads the login page
+- [ ] Login works (demo: `john@presstech.com` / `Password1` if seeded)
+- [ ] Cron jobs running (knowledge sources index, not stuck on `pending`)
+- [ ] AI replies work in bot chat (DeepSeek/OpenRouter keys set)
+- [ ] Wasender webhook URL points to `presstech.atechleb.com`
 
-1. `NEXT_PUBLIC_API_URL` on Vercel matches `APP_URL` on the API.
-2. `SANCTUM_STATEFUL_DOMAINS` includes your Vercel custom domain (no `https://`, no trailing slash).
-3. `SESSION_DOMAIN=.yourdomain.com` (leading dot, root domain only).
-4. `SESSION_SAME_SITE=none` and `SESSION_SECURE_COOKIE=true` (required for cross-subdomain cookies over HTTPS).
-5. `FRONTEND_URL` matches the Vercel custom domain.
+### CORS & cookies
 
-Test login from `https://yourdomain.com` — the browser should receive session cookies from `api.yourdomain.com`.
+| Setting | Value |
+|---------|-------|
+| `NEXT_PUBLIC_API_URL` | `https://presstech.atechleb.com` |
+| `APP_URL` | `https://presstech.atechleb.com` |
+| `FRONTEND_URL` | `https://presstech.vercel.app` |
+| `CORS_ALLOWED_ORIGINS` | `https://presstech.vercel.app` |
+| `SANCTUM_STATEFUL_DOMAINS` | `presstech.vercel.app` |
+| `SESSION_DOMAIN` | `presstech.atechleb.com` |
+| `SESSION_SAME_SITE` | `none` |
+| `SESSION_SECURE_COOKIE` | `true` |
 
 ---
 
-## 4. Optional services (add later)
-
-| Feature | Shared-hosting alternative |
-|---------|---------------------------|
-| Vector search (Qdrant) | [Qdrant Cloud](https://qdrant.tech/cloud/) |
-| Object storage | Hostinger Object Storage / AWS S3 |
-| Realtime (Reverb) | [Pusher](https://pusher.com) or Ably |
-| Email | Hostinger SMTP / Mailgun / Resend |
-
----
-
-## 5. Local development (no Docker)
-
-Use [Laragon](https://laragon.org) or any local PHP + MySQL stack:
+## 4. Local development
 
 ```bash
 # Frontend
@@ -184,7 +197,23 @@ composer install
 cp .env.example .env
 php artisan key:generate
 php artisan migrate
+php artisan db:seed
 php artisan serve
+
+# Queue (for knowledge crawl)
+php artisan queue:work
 ```
 
-Create a MySQL database in Laragon and set `DB_*` values in `backend/.env`.
+Local URLs: frontend `http://localhost:3000`, API `http://localhost:8000`
+
+---
+
+## 5. Troubleshooting
+
+| Issue | Fix |
+|-------|-----|
+| Login works locally but not on Vercel | Check `SANCTUM_STATEFUL_DOMAINS`, CORS, and cookie settings above |
+| Knowledge stuck on `pending` | Start cron / `php artisan queue:work` |
+| 500 on API | Check `storage/logs/laravel.log`, permissions on `storage/` |
+| CORS error in browser | Verify `CORS_ALLOWED_ORIGINS` matches exact frontend URL (no trailing slash) |
+| WhatsApp no replies | Webhook must be public HTTPS; check Wasender session + bot link |
