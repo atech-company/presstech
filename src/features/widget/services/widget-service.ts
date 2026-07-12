@@ -1,8 +1,16 @@
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
+function widgetApiBase(): string {
+  if (typeof window !== "undefined") {
+    return window.location.origin;
+  }
+
+  return API_URL;
+}
+
 async function widgetFetch<T>(path: string, token: string, options?: RequestInit): Promise<T> {
   const separator = path.includes("?") ? "&" : "?";
-  const url = `${API_URL}/api/v1${path}${separator}token=${encodeURIComponent(token)}`;
+  const url = `${widgetApiBase()}/api/v1${path}${separator}token=${encodeURIComponent(token)}`;
 
   const response = await fetch(url, {
     ...options,
