@@ -1,15 +1,22 @@
 import axios, { type AxiosError, type AxiosRequestConfig } from "axios";
+import { useAuthStore } from "@/store/auth-store";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
 export const apiClient = axios.create({
   baseURL: `${API_URL}/api/v1`,
-  withCredentials: true,
-  withXSRFToken: true,
   headers: {
     Accept: "application/json",
     "Content-Type": "application/json",
   },
+});
+
+apiClient.interceptors.request.use((config) => {
+  const token = useAuthStore.getState().token;
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
 });
 
 export interface ApiResponse<T> {
@@ -45,12 +52,6 @@ apiClient.interceptors.response.use(
     return Promise.reject(new ApiClientError(message, status, errors));
   }
 );
-
-export async function getCsrfCookie(): Promise<void> {
-  await axios.get(`${API_URL}/sanctum/csrf-cookie`, {
-    withCredentials: true,
-  });
-}
 
 export async function apiGet<T>(
   url: string,

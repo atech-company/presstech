@@ -17,14 +17,14 @@ import { ApiClientError } from "@/services/api/client";
 export function useAuth() {
   const router = useRouter();
   const queryClient = useQueryClient();
-  const { user, isAuthenticated, setUser, logout: clearAuth } = useAuthStore();
+  const { user, isAuthenticated, setAuth, setUser, logout: clearAuth } = useAuthStore();
   const { setOrganizations, setWorkspaces, setCurrentOrganization, setCurrentWorkspace } =
     useWorkspaceStore();
 
   const loginMutation = useMutation({
     mutationFn: (data: LoginInput) => authService.login(data),
     onSuccess: async (res) => {
-      setUser(res.data.user);
+      setAuth(res.data.user, res.data.token);
       toast.success("Welcome back!");
       router.push("/dashboard");
       router.refresh();
@@ -44,7 +44,7 @@ export function useAuth() {
   const registerMutation = useMutation({
     mutationFn: (data: RegisterInput) => authService.register(data),
     onSuccess: (res) => {
-      setUser(res.data.user);
+      setAuth(res.data.user, res.data.token);
       toast.success("Account created! Please verify your email.");
       router.push("/verify-email");
     },
