@@ -44,3 +44,10 @@ export interface WhatsAppStatusResponse {
   session_api: Record<string, unknown> | null;
   session: Record<string, unknown> | null;
 }
+
+export interface WasenderSession {
+  id: number;
+  name?: string;
+  status?: string;
+  phone_number?: string;
+}

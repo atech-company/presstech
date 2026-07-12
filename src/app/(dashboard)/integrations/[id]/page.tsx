@@ -29,7 +29,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import type { IntegrationTestResult } from "@/types/api/integrations";
+import type { IntegrationTestResult, WasenderSession } from "@/types/api/integrations";
 import { toast } from "sonner";
 
 function apiErrorMessage(err: unknown, fallback: string) {
@@ -50,6 +50,15 @@ export default function IntegrationDetailPage() {
   const [botId, setBotId] = useState("");
   const [testResult, setTestResult] = useState<IntegrationTestResult | null>(null);
   const [qrCode, setQrCode] = useState<string | null>(null);
+  const [connectError, setConnectError] = useState<string | null>(null);
+  const [wasenderSessions, setWasenderSessions] = useState<WasenderSession[]>([]);
+
+  function whatsappCredentials() {
+    return {
+      ...(pat ? { personal_access_token: pat } : {}),
+      ...(sessionId ? { wasender_session_id: sessionId } : {}),
+    };
+  }
 
   const { data, isLoading } = useQuery({
     queryKey: ["integration", id],
@@ -107,24 +116,49 @@ export default function IntegrationDetailPage() {
     onError: (err) => toast.error(apiErrorMessage(err, "Test failed")),
   });
 
+  const loadSessionsMutation = useMutation({
+    mutationFn: () => integrationService.whatsappSessions(id, pat || undefined),
+    onSuccess: (res) => {
+      const sessions = Array.isArray(res.data) ? res.data : [];
+      setWasenderSessions(sessions);
+      if (sessions.length === 0) {
+        toast.error("No sessions found — create a session in Wasender first");
+      } else {
+        toast.success(`Found ${sessions.length} session(s)`);
+      }
+    },
+    onError: (err) => toast.error(apiErrorMessage(err, "Failed to load sessions")),
+  });
+
   const connectMutation = useMutation({
-    mutationFn: () => integrationService.whatsappConnect(id),
+    mutationFn: () => integrationService.whatsappConnect(id, whatsappCredentials()),
     onSuccess: () => {
+      setConnectError(null);
+      queryClient.invalidateQueries({ queryKey: ["integration", id] });
       toast.success("Connecting — fetching QR code...");
       qrMutation.mutate();
     },
-    onError: (err) => toast.error(apiErrorMessage(err, "Failed to start WhatsApp connection")),
+    onError: (err) => {
+      const message = apiErrorMessage(err, "Failed to start WhatsApp connection");
+      setConnectError(message);
+      toast.error(message);
+    },
   });
 
   const qrMutation = useMutation({
-    mutationFn: () => integrationService.whatsappQrCode(id),
+    mutationFn: () => integrationService.whatsappQrCode(id, whatsappCredentials()),
     onSuccess: (res) => {
+      setConnectError(null);
       setQrCode(res.data.qrcode);
       if (!res.data.qrcode) {
-        toast.error("No QR code returned — save PAT + Session ID first, then click Connect");
+        toast.error("No QR code returned — try Connect again or check Wasender subscription");
       }
     },
-    onError: (err) => toast.error(apiErrorMessage(err, "Failed to fetch QR code")),
+    onError: (err) => {
+      const message = apiErrorMessage(err, "Failed to fetch QR code");
+      setConnectError(message);
+      toast.error(message);
+    },
   });
 
   function copyWebhook(url: string) {
@@ -248,24 +282,58 @@ export default function IntegrationDetailPage() {
                     type="password"
                     value={sessionApiKey}
                     onChange={(e) => setSessionApiKey(e.target.value)}
-                    placeholder="Wasender session API key"
+                    placeholder="For sending messages (from Wasender session page)"
                   />
+                  <p className="text-xs text-muted-foreground">
+                    Different from PAT — this is the per-session key used to send WhatsApp replies.
+                  </p>
                 </div>
                 <div className="space-y-2">
                   <Label>
-                    Personal Access Token
+                    Personal Access Token (for QR)
                     {integration.config?.personal_access_token_set === true && " (saved — leave blank to keep)"}
                   </Label>
                   <Input
                     type="password"
                     value={pat}
                     onChange={(e) => setPat(e.target.value)}
-                    placeholder="For QR linking"
+                    placeholder="Wasender → Settings → Personal Access Token"
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label>Wasender Session ID</Label>
-                  <Input value={sessionId} onChange={(e) => setSessionId(e.target.value)} placeholder="e.g. 12345" />
+                  <Label>Wasender Session ID (numeric)</Label>
+                  <div className="flex gap-2">
+                    <Input
+                      value={sessionId}
+                      onChange={(e) => setSessionId(e.target.value)}
+                      placeholder="e.g. 12345"
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => loadSessionsMutation.mutate()}
+                      disabled={loadSessionsMutation.isPending || (!pat && !integration.config?.personal_access_token_set)}
+                    >
+                      Load
+                    </Button>
+                  </div>
+                  {wasenderSessions.length > 0 && (
+                    <Select value={sessionId} onValueChange={setSessionId}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Pick a session" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {wasenderSessions.map((session) => (
+                          <SelectItem key={session.id} value={String(session.id)}>
+                            #{session.id} {session.name ?? ""} {session.status ? `(${session.status})` : ""}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                  <p className="text-xs text-muted-foreground">
+                    Not the API key — the numeric session ID from Wasender → Sessions.
+                  </p>
                 </div>
               </>
             )}
@@ -310,21 +378,27 @@ export default function IntegrationDetailPage() {
               </div>
 
               <ol className="list-decimal space-y-1 pl-5 text-sm text-muted-foreground">
-                <li>Save PAT + Session ID above</li>
-                <li>Click Connect to start the Wasender session</li>
-                <li>Scan the QR code with WhatsApp → Linked Devices</li>
-                <li>Paste the webhook URL into Wasender and enable messages.received</li>
+                <li>Enter PAT → click <strong>Load</strong> → pick your session ID</li>
+                <li>Click <strong>Connect &amp; Get QR</strong> (saves credentials automatically)</li>
+                <li>Scan with WhatsApp → Linked Devices</li>
+                <li>Paste webhook URL into Wasender and enable messages.received</li>
               </ol>
+
+              {connectError && (
+                <div className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
+                  {connectError}
+                </div>
+              )}
 
               <div className="flex flex-wrap gap-3">
                 <Button
                   onClick={() => {
                     if (!sessionId) {
-                      toast.error("Enter and save Wasender Session ID first");
+                      toast.error("Enter or select a Wasender Session ID");
                       return;
                     }
-                    if (!integration.config?.personal_access_token_set && !pat) {
-                      toast.error("Enter and save Personal Access Token first");
+                    if (!pat && !integration.config?.personal_access_token_set) {
+                      toast.error("Enter your Personal Access Token first");
                       return;
                     }
                     connectMutation.mutate();
