@@ -1,13 +1,16 @@
 import axios, { type AxiosError, type AxiosRequestConfig } from "axios";
 import { getAuthToken, useAuthStore } from "@/store/auth-store";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+const API_URL = (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000").replace(
+  /\/$/,
+  ""
+);
 
+/**
+ * Call Hostinger directly from the browser.
+ * Proxying via Vercel rewrites uses AWS IPs, which Hostinger rate-limits (HTTP 429).
+ */
 function getApiBaseUrl(): string {
-  if (typeof window !== "undefined") {
-    return "/api/v1";
-  }
-
   return `${API_URL}/api/v1`;
 }
 
@@ -17,12 +20,12 @@ export const apiClient = axios.create({
     Accept: "application/json",
     "Content-Type": "application/json",
   },
+  // Auth is via Bearer token; no need to send cookies cross-origin
+  withCredentials: false,
 });
 
 apiClient.interceptors.request.use((config) => {
-  if (typeof window !== "undefined") {
-    config.baseURL = "/api/v1";
-  }
+  config.baseURL = getApiBaseUrl();
 
   const token = getAuthToken();
   if (token) {
@@ -67,7 +70,11 @@ apiClient.interceptors.response.use(
     }
 
     const message =
-      error.response?.data?.message ?? error.message ?? "An error occurred";
+      error.response?.data?.message ??
+      (status === 429
+        ? "Too many requests — please wait a moment and try again."
+        : error.message) ??
+      "An error occurred";
     const errors = error.response?.data?.errors;
     return Promise.reject(new ApiClientError(message, status, errors));
   }
