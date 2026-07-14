@@ -11,24 +11,39 @@ import type {
   RegisterInput,
 } from "@/features/auth/schemas";
 import { useAuthStore } from "@/store/auth-store";
-import { useWorkspaceStore } from "@/store/workspace-store";
+import { useWorkspaceStore, waitForWorkspaceHydration } from "@/store/workspace-store";
 import { ApiClientError } from "@/services/api/client";
 
-async function refreshWorkspaces() {
+async function refreshWorkspaces(userId?: string | null) {
+  await waitForWorkspaceHydration();
+
+  const store = useWorkspaceStore.getState();
   const {
     setOrganizations,
     setWorkspaces,
     setCurrentOrganization,
     setCurrentWorkspace,
-  } = useWorkspaceStore.getState();
+    clearWorkspaceState,
+  } = store;
+
+  const uid = userId ?? useAuthStore.getState().user?.id ?? null;
+
+  // Drop persisted workspace if it belongs to a different account
+  if (store.userId && uid && store.userId !== uid) {
+    clearWorkspaceState();
+  }
 
   const orgsRes = await authService.getOrganizations();
   setOrganizations(orgsRes.data);
 
   if (orgsRes.data.length === 0) {
-    setCurrentOrganization(null);
-    setWorkspaces([]);
-    setCurrentWorkspace(null);
+    useWorkspaceStore.setState({
+      ...useWorkspaceStore.getState(),
+      userId: uid,
+      currentOrganization: null,
+      workspaces: [],
+      currentWorkspace: null,
+    });
     return;
   }
 
@@ -39,16 +54,31 @@ async function refreshWorkspaces() {
   setWorkspaces(wsRes.data);
 
   if (wsRes.data.length === 0) {
-    setCurrentWorkspace(null);
+    useWorkspaceStore.setState({
+      userId: uid,
+      currentOrganization: org,
+      organizations: orgsRes.data,
+      workspaces: [],
+      currentWorkspace: null,
+    });
     return;
   }
 
   const persistedId = useWorkspaceStore.getState().currentWorkspace?.id;
-  const stillValid = persistedId
-    ? wsRes.data.find((ws) => ws.id === persistedId)
-    : undefined;
+  const sameUser = useWorkspaceStore.getState().userId === uid;
+  const stillValid =
+    sameUser && persistedId
+      ? wsRes.data.find((ws) => ws.id === persistedId)
+      : undefined;
 
-  setCurrentWorkspace(stillValid ?? wsRes.data[0]);
+  useWorkspaceStore.setState({
+    userId: uid,
+    currentOrganization: org,
+    organizations: orgsRes.data,
+    workspaces: wsRes.data,
+    // Always from the membership-filtered API list — never a stale ID
+    currentWorkspace: stillValid ?? wsRes.data[0],
+  });
 }
 
 export function useAuth() {
@@ -62,14 +92,14 @@ export function useAuth() {
   const loginMutation = useMutation({
     mutationFn: (data: LoginInput) => authService.login(data),
     onSuccess: async (res) => {
-      setAuth(res.data.user, res.data.token);
       clearWorkspaceState();
+      setAuth(res.data.user, res.data.token);
       toast.success("Welcome back!");
       router.push("/dashboard");
       router.refresh();
 
       try {
-        await refreshWorkspaces();
+        await refreshWorkspaces(res.data.user.id);
       } catch {
         // Session is valid; workspace data can load on the dashboard
       }
@@ -83,10 +113,10 @@ export function useAuth() {
   const registerMutation = useMutation({
     mutationFn: (data: RegisterInput) => authService.register(data),
     onSuccess: async (res) => {
-      setAuth(res.data.user, res.data.token);
       clearWorkspaceState();
+      setAuth(res.data.user, res.data.token);
       try {
-        await refreshWorkspaces();
+        await refreshWorkspaces(res.data.user.id);
       } catch {
         // Workspace can load after email verification
       }

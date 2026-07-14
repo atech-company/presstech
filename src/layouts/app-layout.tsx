@@ -4,9 +4,11 @@ import { useEffect, useState } from "react";
 import { AppSidebar } from "@/components/layout/app-sidebar";
 import { AppTopbar } from "@/components/layout/app-topbar";
 import { useAuth } from "@/hooks/use-auth";
+import { useWorkspaceStore, waitForWorkspaceHydration } from "@/store/workspace-store";
 
 export function AppLayout({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated, loadWorkspaces } = useAuth();
+  const { isAuthenticated, loadWorkspaces, user } = useAuth();
+  const hydrated = useWorkspaceStore((s) => s._hasHydrated);
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
@@ -18,18 +20,21 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
     let cancelled = false;
     setReady(false);
 
-    void loadWorkspaces()
-      .catch(() => {
+    void (async () => {
+      try {
+        await waitForWorkspaceHydration();
+        await loadWorkspaces();
+      } catch {
         // Still allow the shell; pages can retry
-      })
-      .finally(() => {
+      } finally {
         if (!cancelled) setReady(true);
-      });
+      }
+    })();
 
     return () => {
       cancelled = true;
     };
-  }, [isAuthenticated, loadWorkspaces]);
+  }, [isAuthenticated, loadWorkspaces, user?.id, hydrated]);
 
   return (
     <div className="flex h-screen overflow-hidden bg-background">
