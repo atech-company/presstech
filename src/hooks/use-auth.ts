@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useCallback } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { authService } from "@/features/auth/services/auth-service";
