@@ -217,7 +217,7 @@ export default function KnowledgePage() {
                   </div>
                 </div>
 
-                {source.metadata?.error && (
+                {source.status === "failed" && source.metadata?.error && (
                   <div className="flex gap-2 rounded-md bg-destructive/10 p-2 text-xs text-destructive">
                     <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
                     <span>{source.metadata.error}</span>
