@@ -2,14 +2,21 @@ import type { WidgetBotConfig, WidgetMessage, WidgetProduct } from "@/features/w
 
 export type { WidgetBotConfig, WidgetMessage, WidgetProduct };
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
-
+/**
+ * Widget calls the Laravel API host directly.
+ * Routing through the Vercel rewrite would hit Hostinger's AWS IP rate limits (HTTP 429).
+ */
 function widgetApiBase(): string {
-  if (typeof window !== "undefined") {
-    return "";
+  const configured = (process.env.NEXT_PUBLIC_API_URL ?? "").replace(/\/$/, "");
+  if (configured) {
+    return configured;
   }
 
-  return API_URL;
+  if (typeof window !== "undefined") {
+    return window.location.origin;
+  }
+
+  return "http://localhost:8000";
 }
 
 async function widgetFetch<T>(path: string, token: string, options?: RequestInit): Promise<T> {
@@ -18,6 +25,7 @@ async function widgetFetch<T>(path: string, token: string, options?: RequestInit
 
   const response = await fetch(url, {
     ...options,
+    credentials: "omit",
     headers: {
       Accept: "application/json",
       "Content-Type": "application/json",
@@ -26,7 +34,16 @@ async function widgetFetch<T>(path: string, token: string, options?: RequestInit
     },
   });
 
-  const json = await response.json();
+  let json: { message?: string; data?: T } = {};
+  try {
+    json = await response.json();
+  } catch {
+    // non-JSON error body (e.g. host 429 HTML)
+  }
+
+  if (response.status === 429) {
+    throw new Error("Too many requests — please wait a moment and try again.");
+  }
 
   if (!response.ok) {
     throw new Error(json.message ?? "Widget request failed");

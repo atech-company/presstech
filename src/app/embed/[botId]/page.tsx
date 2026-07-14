@@ -71,13 +71,16 @@ export default function EmbedChatPage() {
     try {
       const res = await widgetService.sendMessage(conversationId, token, content);
       setMessages((prev) => [...prev, res.assistant_message]);
-    } catch {
+    } catch (err) {
       setMessages((prev) => [
         ...prev,
         {
           id: `e-${Date.now()}`,
           role: "assistant",
-          content: "Sorry, something went wrong. Please try again.",
+          content:
+            err instanceof Error
+              ? err.message
+              : "Sorry, something went wrong. Please try again.",
           created_at: new Date().toISOString(),
         },
       ]);
