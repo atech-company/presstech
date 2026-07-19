@@ -61,6 +61,8 @@ export default function IntegrationDetailPage() {
   const [pat, setPat] = useState("");
   const [sessionId, setSessionId] = useState("");
   const [botId, setBotId] = useState("");
+  const [phoneNumber, setPhoneNumber] = useState("");
+  const [sessionName, setSessionName] = useState("");
   const [qrCode, setQrCode] = useState<string | null>(null);
   const [setupError, setSetupError] = useState<string | null>(null);
   const [wasenderSessions, setWasenderSessions] = useState<WasenderSession[]>([]);
@@ -94,6 +96,8 @@ export default function IntegrationDetailPage() {
     if (!integration) return;
     setSessionId(String(integration.config?.wasender_session_id ?? ""));
     setBotId(String(integration.config?.bot_id ?? ""));
+    setPhoneNumber(String(integration.config?.phone_number ?? ""));
+    setSessionName(String(integration.config?.session_name ?? ""));
   }, [integration]);
 
   useEffect(() => {
@@ -121,13 +125,17 @@ export default function IntegrationDetailPage() {
         ...(pat ? { personal_access_token: pat } : {}),
         ...(sessionId ? { wasender_session_id: sessionId } : {}),
         ...(botId ? { bot_id: botId } : {}),
+        ...(phoneNumber.trim() ? { phone_number: phoneNumber.trim() } : {}),
+        ...(sessionName.trim() ? { session_name: sessionName.trim() } : {}),
       }),
     onSuccess: (res) => {
       setSetupError(null);
       setQrCode(res.data.qrcode);
+      if (res.data.session_id) setSessionId(String(res.data.session_id));
+      if (res.data.phone_number) setPhoneNumber(String(res.data.phone_number));
       queryClient.invalidateQueries({ queryKey: ["integration", id] });
       queryClient.invalidateQueries({ queryKey: ["integration-status", id] });
-      toast.success("Scan the QR code with WhatsApp on your phone");
+      toast.success("Scan the QR code with WhatsApp on that phone (Linked Devices)");
     },
     onError: (err) => {
       const message = apiErrorMessage(err, "Failed to connect WhatsApp");
@@ -151,7 +159,8 @@ export default function IntegrationDetailPage() {
   const status = statusData?.data;
   const bots = botsData?.data ?? [];
   const hasPat = !!pat || integration.config?.personal_access_token_set === true;
-  const ready = !!botId && hasPat;
+  const canRegisterWithPhone = !!botId && hasPat && phoneNumber.trim().length >= 8;
+  const canConnectExisting = !!botId && hasPat;
 
   if (isWebsite) {
     return (
@@ -259,7 +268,7 @@ export default function IntegrationDetailPage() {
 
       <PageHeader
         title={integration.name}
-        description="Connect WhatsApp in 2 steps — scan QR and you're live"
+        description="Register any WhatsApp number — create a session, scan QR, AI replies"
         action={
           <Badge variant={status?.connected ? "success" : "warning"}>
             {status?.connected ? "Connected" : "Not connected"}
@@ -275,7 +284,8 @@ export default function IntegrationDetailPage() {
               WhatsApp Setup
             </CardTitle>
             <CardDescription>
-              We auto-configure the webhook and API key from your Wasender account after you scan the QR.
+              Enter the phone number to register, then scan the QR with WhatsApp → Linked Devices on that phone.
+              We auto-configure the webhook and API key from your Wasender account.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -307,32 +317,26 @@ export default function IntegrationDetailPage() {
             </div>
 
             <div className="space-y-2">
-              <Label>Wasender session (optional)</Label>
-              <div className="flex gap-2">
-                <Select value={sessionId} onValueChange={setSessionId}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Auto-pick first session" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {wasenderSessions.map((session) => (
-                      <SelectItem key={session.id} value={String(session.id)}>
-                        #{session.id} {session.name ?? ""} {session.status ? `(${session.status})` : ""}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => loadSessionsMutation.mutate()}
-                  disabled={loadSessionsMutation.isPending || !hasPat}
-                >
-                  Load
-                </Button>
-              </div>
+              <Label>WhatsApp phone number</Label>
+              <Input
+                type="tel"
+                inputMode="numeric"
+                value={phoneNumber}
+                onChange={(e) => setPhoneNumber(e.target.value)}
+                placeholder="96170123456 (international, digits only)"
+              />
               <p className="text-xs text-muted-foreground">
-                Leave empty to use your first Wasender session automatically.
+                Country code + number, no + or spaces. This number will host the AI chatbot.
               </p>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Session name (optional)</Label>
+              <Input
+                value={sessionName}
+                onChange={(e) => setSessionName(e.target.value)}
+                placeholder="e.g. Store support line"
+              />
             </div>
 
             {setupError && (
@@ -344,16 +348,59 @@ export default function IntegrationDetailPage() {
             <Button
               className="w-full"
               size="lg"
-              disabled={!ready || setupMutation.isPending}
+              disabled={!canRegisterWithPhone || setupMutation.isPending}
               onClick={() => setupMutation.mutate()}
             >
               {setupMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Connect WhatsApp &amp; Show QR
+              Register number &amp; Show QR
             </Button>
+
+            <details className="rounded-lg border p-3">
+              <summary className="cursor-pointer text-sm font-medium">Advanced: use existing Wasender session</summary>
+              <div className="mt-3 space-y-3">
+                <div className="space-y-2">
+                  <Label>Wasender session</Label>
+                  <div className="flex gap-2">
+                    <Select value={sessionId} onValueChange={setSessionId}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Auto-pick first session" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {wasenderSessions.map((session) => (
+                          <SelectItem key={session.id} value={String(session.id)}>
+                            #{session.id} {session.name ?? ""} {session.phone_number ? `· ${session.phone_number}` : ""} {session.status ? `(${session.status})` : ""}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => loadSessionsMutation.mutate()}
+                      disabled={loadSessionsMutation.isPending || !hasPat}
+                    >
+                      Load
+                    </Button>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Leave phone empty and pick a session, or leave both empty to use your first Wasender session.
+                  </p>
+                </div>
+                <Button
+                  className="w-full"
+                  variant="outline"
+                  disabled={!canConnectExisting || setupMutation.isPending}
+                  onClick={() => setupMutation.mutate()}
+                >
+                  {setupMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  Connect existing session &amp; Show QR
+                </Button>
+              </div>
+            </details>
 
             {qrCode && (
               <div className="flex flex-col items-center gap-3 rounded-lg border bg-muted/30 p-6">
-                <p className="font-medium">Scan with WhatsApp → Linked Devices</p>
+                <p className="font-medium text-center">Scan with WhatsApp → Linked Devices on that phone</p>
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={qrImageUrl(qrCode)} alt="WhatsApp QR code" className="rounded-md border bg-white" width={280} height={280} />
               </div>

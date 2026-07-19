@@ -52,7 +52,13 @@ export const integrationService = {
 
   whatsappSetup(
     id: string,
-    data?: { personal_access_token?: string; wasender_session_id?: string; bot_id?: string }
+    data?: {
+      personal_access_token?: string;
+      wasender_session_id?: string;
+      bot_id?: string;
+      phone_number?: string;
+      session_name?: string;
+    }
   ) {
     return apiPost<WhatsAppSetupResponse>(`/integrations/${id}/whatsapp/setup`, data ?? {});
   },

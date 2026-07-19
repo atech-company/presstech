@@ -109,14 +109,29 @@ curl https://presstech.atechleb.com/up
 
 Should return `200 OK`.
 
-### WhatsApp webhooks (Wasender)
+### WhatsApp AI chatbot (Wasender)
 
-Webhook URL format:
+PressTech links any WhatsApp number via Wasender (Linked Devices / QR), not Meta Cloud API.
+
+**Register a number (dashboard):**
+
+1. Create or open a WhatsApp integration and pick the **bot** that should reply.
+2. Paste your **Wasender Personal Access Token** (Wasender → Settings).
+3. Enter the **phone number** in international digits only (e.g. `96170123456`).
+4. Click **Register number & Show QR** — PressTech creates the Wasender session (or reuses one for that phone), sets the webhook, and returns a QR.
+5. On that phone open WhatsApp → **Linked Devices** → scan the QR.
+6. Wait until status shows connected + webhook configured + API key saved.
+7. Message that number from another phone — the linked bot replies via AI.
+
+Webhook URL (set automatically on setup; `APP_URL` must be public HTTPS):
 ```
 https://presstech.atechleb.com/api/v1/webhooks/{integration-id}
 ```
 
-Set this in your Wasender session settings after connecting WhatsApp in the dashboard.
+**Notes:**
+- Requires a Wasender account with available session quota.
+- Session limits depend on your Wasender plan.
+- This is a linked-device model, not official WhatsApp Business Cloud API.
 
 ---
 
@@ -166,7 +181,7 @@ To use your own domain later (e.g. `app.atechleb.com`):
 - [ ] Login works (demo: `john@presstech.com` / `Password1` if seeded)
 - [ ] Cron jobs running (knowledge sources index, not stuck on `pending`)
 - [ ] AI replies work in bot chat (DeepSeek/OpenRouter keys set)
-- [ ] Wasender webhook URL points to `presstech.atechleb.com`
+- [ ] WhatsApp: register phone → scan QR → inbound message gets AI reply (webhook on `presstech.atechleb.com`)
 
 ### CORS & cookies
 
@@ -215,5 +230,6 @@ Local URLs: frontend `http://localhost:3000`, API `http://localhost:8000`
 | Login works locally but not on Vercel | Check `SANCTUM_STATEFUL_DOMAINS`, CORS, and cookie settings above |
 | Knowledge stuck on `pending` | Start cron / `php artisan queue:work` |
 | 500 on API | Check `storage/logs/laravel.log`, permissions on `storage/` |
-| CORS error in browser | Verify `CORS_ALLOWED_ORIGINS` matches exact frontend URL (no trailing slash) |
+| CORS error in browser | Frontend proxies via Vercel `/api/v1` — redeploy frontend; or set `CORS_ALLOWED_ORIGINS` on backend |
+| `PailServiceProvider not found` | Delete `bootstrap/cache/packages.php` and `bootstrap/cache/services.php` on server |
 | WhatsApp no replies | Webhook must be public HTTPS; check Wasender session + bot link |

@@ -178,7 +178,7 @@ export default function IntegrationsPage() {
           <div className="space-y-4">
             {isWhatsApp && (
               <p className="text-sm text-muted-foreground">
-                Only 2 things needed: pick a bot and paste your Wasender token. Next step: scan QR — webhook and API key are configured automatically.
+                Pick a bot and paste your Wasender token. Next you will enter any WhatsApp phone number, scan the QR (Linked Devices), and that number becomes an AI chatbot.
               </p>
             )}
             {isWebsite && (

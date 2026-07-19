@@ -53,6 +53,7 @@ export interface WhatsAppStatusResponse {
 
 export interface WhatsAppSetupResponse {
   session_id: string;
+  phone_number?: string | null;
   qrcode: string | null;
   webhook_url: string;
   webhook_configured: boolean;
