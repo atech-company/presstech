@@ -7,10 +7,17 @@ const API_URL = (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000").rep
 );
 
 /**
- * Call Hostinger directly from the browser.
- * Proxying via Vercel rewrites uses AWS IPs, which Hostinger rate-limits (HTTP 429).
+ * Browser: use same-origin `/api/v1` (Next/Vercel rewrite → Laravel).
+ * That avoids Hostinger CDN blocking cross-origin browser calls with 403 HTML
+ * (which shows up as a CORS error because those responses have no ACAO header).
+ *
+ * SSR / server: call the API host directly.
  */
 function getApiBaseUrl(): string {
+  if (typeof window !== "undefined") {
+    return "/api/v1";
+  }
+
   return `${API_URL}/api/v1`;
 }
 

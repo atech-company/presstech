@@ -230,6 +230,6 @@ Local URLs: frontend `http://localhost:3000`, API `http://localhost:8000`
 | Login works locally but not on Vercel | Check `SANCTUM_STATEFUL_DOMAINS`, CORS, and cookie settings above |
 | Knowledge stuck on `pending` | Start cron / `php artisan queue:work` |
 | 500 on API | Check `storage/logs/laravel.log`, permissions on `storage/` |
-| CORS error in browser | Frontend proxies via Vercel `/api/v1` — redeploy frontend; or set `CORS_ALLOWED_ORIGINS` on backend |
+| CORS error in browser | Hostinger CDN often returns 403 HTML without CORS headers on direct browser→API calls. Dashboard uses same-origin `/api/v1` (Vercel rewrite). Clear CDN/bot blocks in hPanel if API itself returns 403. |
 | `PailServiceProvider not found` | Delete `bootstrap/cache/packages.php` and `bootstrap/cache/services.php` on server |
 | WhatsApp no replies | Webhook must be public HTTPS; check Wasender session + bot link |
